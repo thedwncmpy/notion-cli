@@ -116,15 +116,93 @@ JSON
   echo "Initialized config at $cfg_path"
 }
 
+find_config() {
+  local current_dir="${PWD:A}"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/.notion-cli/config.json" ]]; then
+      echo "$current_dir/.notion-cli/config.json"
+      return 0
+    fi
+    current_dir="$(dirname "$current_dir")"
+  done
+  return 1
+}
+
 notion_cmd_link() {
-  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  local subdir=""
+  local relation_page_id=""
+  local force=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help|-h)
+        notion_link_usage
+        return 0
+        ;;
+      --force)
+        force=1
+        shift
+        ;;
+      -*)
+        echo "Error: unknown argument for link: $1"
+        notion_link_usage
+        return 1
+        ;;
+      *)
+        if [[ -z "$subdir" ]]; then
+          subdir="$1"
+        elif [[ -z "$relation_page_id" ]]; then
+          relation_page_id="$1"
+        else
+          echo "Error: too many arguments for link"
+          notion_link_usage
+          return 1
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$subdir" || -z "$relation_page_id" ]]; then
+    echo "Error: <subdir> and <relation_page_id> are required"
     notion_link_usage
-    return 0
+    return 1
   fi
 
-  echo "Error: 'notion link' is not implemented yet in this slice."
-  echo "Run: notion link --help"
-  return 1
+  local config_path
+  config_path="$(find_config)" || {
+    echo "Error: No project config found. Run 'notion init' first."
+    return 1
+  }
+
+  local notes_root
+  notes_root="$(jq -r '.notes_root' "$config_path")"
+
+  if [[ ! -d "$notes_root/$subdir" ]]; then
+    echo "Error: directory does not exist: $notes_root/$subdir"
+    return 1
+  fi
+
+  local existing_mapping
+  existing_mapping="$(jq -r ".mappings.\"$subdir\" // empty" "$config_path")"
+
+  if [[ -n "$existing_mapping" && $force -ne 1 ]]; then
+    echo "Error: '$subdir' is already mapped to '$existing_mapping' (use --force to overwrite)"
+    return 1
+  fi
+
+  local subdir_escaped relation_escaped
+  subdir_escaped="$(json_escape "$subdir")"
+  relation_escaped="$(json_escape "$relation_page_id")"
+
+  # Use a temporary file to update the config
+  local tmp_cfg
+  tmp_cfg="$(mktemp)"
+  jq --arg subdir "$subdir" --arg relation "$relation_page_id" \
+     '.mappings[$subdir] = $relation' "$config_path" > "$tmp_cfg"
+  mv "$tmp_cfg" "$config_path"
+
+  echo "Linked '$subdir' to '$relation_page_id' in $config_path"
 }
 
 notion_cmd_upload() {
