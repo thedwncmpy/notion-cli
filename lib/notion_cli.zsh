@@ -12,7 +12,9 @@ Commands:
   download   Download a markdown file from Notion
   help       Show this help
 USAGE
+
 }
+
 notion_init_usage() {
   echo "Usage: notion init --database-id <id> --notes-root <path> [--force]"
 }
@@ -39,7 +41,7 @@ notion_load_token() {
   token="${token%"${token##*[![:space:]]}"}"
   token="${token%"${token##*[![:space:]]}"}"
 
-  if [[ -n "${token}" ]]; then 
+  if [[ -n "${token}" ]]; then
     echo "$token"
     return 0
   fi
@@ -52,22 +54,21 @@ notion_load_token() {
   token="${token#"${token%%[![:space:]]*}"}"
   token="${token%"${token##*[![:space:]]}"}"
 
-
-  if [[ -n "${token}" ]]; then 
+  if [[ -n "${token}" ]]; then
     echo "$token"
     return 0
   fi
-  
+
   return 1
 }
 
 notion_require_token() {
   local res
   if ! res="$(notion_load_token)"; then
-    echo "Error: Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)"
+    echo "Error: Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)" >&2
     return 1
   fi 
-  
+
   echo "$res"
 }
 
@@ -86,35 +87,35 @@ notion_cmd_init() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help|-h)
-        notion_init_usage
-        return 0
-        ;;
-      --database-id)
-        if [[ $# -lt 2 || -z "${2:-}" ]]; then
-          echo "Error: --database-id requires a value"
-          return 1
-        fi
-        database_id="$2"
-        shift 2
-        ;;
-      --notes-root)
-        if [[ $# -lt 2 || -z "${2:-}" ]]; then
-          echo "Error: --notes-root requires a value"
-          return 1
-        fi
-        notes_root="$2"
-        shift 2
-        ;;
-      --force)
-        force=1
-        shift
-        ;;
-      *)
-        echo "Error: unknown argument for init: $1"
-        notion_init_usage
+    --help | -h)
+      notion_init_usage
+      return 0
+      ;;
+    --database-id)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: --database-id requires a value"
         return 1
-        ;;
+      fi
+      database_id="$2"
+      shift 2
+      ;;
+    --notes-root)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: --notes-root requires a value"
+        return 1
+      fi
+      notes_root="$2"
+      shift 2
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
+    *)
+      echo "Error: unknown argument for init: $1"
+      notion_init_usage
+      return 1
+      ;;
     esac
   done
 
@@ -145,7 +146,7 @@ notion_cmd_init() {
   db_escaped="$(json_escape "$database_id")"
   root_escaped="$(json_escape "$abs_notes_root")"
 
-  cat > "$cfg_path" <<JSON
+  cat >"$cfg_path" <<JSON
 {
   "version": 1,
   "database_id": "$db_escaped",
@@ -176,31 +177,31 @@ notion_cmd_link() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help|-h)
-        notion_link_usage
-        return 0
-        ;;
-      --force)
-        force=1
-        shift
-        ;;
-      -*)
-        echo "Error: unknown argument for link: $1"
+    --help | -h)
+      notion_link_usage
+      return 0
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
+    -*)
+      echo "Error: unknown argument for link: $1"
+      notion_link_usage
+      return 1
+      ;;
+    *)
+      if [[ -z "$subdir" ]]; then
+        subdir="$1"
+      elif [[ -z "$relation_page_id" ]]; then
+        relation_page_id="$1"
+      else
+        echo "Error: too many arguments for link"
         notion_link_usage
         return 1
-        ;;
-      *)
-        if [[ -z "$subdir" ]]; then
-          subdir="$1"
-        elif [[ -z "$relation_page_id" ]]; then
-          relation_page_id="$1"
-        else
-          echo "Error: too many arguments for link"
-          notion_link_usage
-          return 1
-        fi
-        shift
-        ;;
+      fi
+      shift
+      ;;
     esac
   done
 
@@ -240,7 +241,7 @@ notion_cmd_link() {
   local tmp_cfg
   tmp_cfg="$(mktemp)"
   jq --arg subdir "$subdir" --arg relation "$relation_page_id" \
-     '.mappings[$subdir] = $relation' "$config_path" > "$tmp_cfg"
+    '.mappings[$subdir] = $relation' "$config_path" >"$tmp_cfg"
   mv "$tmp_cfg" "$config_path"
 
   echo "Linked '$subdir' to '$relation_page_id' in $config_path"
@@ -253,7 +254,7 @@ notion_cmd_upload() {
   fi
 
   # NOTE: Slice 5 upload flow:
-  
+
   # 1) Validate required <file.md> argument.
   local file="${1:-}"
   if [[ -z "$file" ]]; then
@@ -277,7 +278,7 @@ notion_cmd_upload() {
   # 3) Locate config via find_config; read notes_root + mappings.
   local config_path
   config_path="$(find_config)" || {
-   echo "Error: No project config found. Run 'notion init' first."
+    echo "Error: No project config found. Run 'notion init' first."
     return 1
   }
 
@@ -289,7 +290,7 @@ notion_cmd_upload() {
     echo "Error: file must be inside notes_root: $abs_notes_root"
     return 1
   fi
-  
+
   # 5) Resolve first-level segment and require mapping.
   local relative_path first_segment
   relative_path="${abs_file#$abs_notes_root/}"
@@ -312,6 +313,7 @@ notion_cmd_upload() {
 
   local database_id
   database_id="$(jq -r '.database_id // empty' "$config_path")"
+
   if [[ -z "$database_id" ]]; then
     echo "Error: database_id missing in config. Re-run notion init."
     return 1
@@ -419,14 +421,161 @@ notion_cmd_upload() {
 }
 
 notion_cmd_download() {
+  # INFO: download <filename>
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     notion_download_usage
     return 0
   fi
+  # TODO: implement function
 
-  echo "Error: 'notion download' is not implemented yet in this slice."
-  echo "Run: notion download --help"
-  return 1
+  # [x] Require `.md` input path.
+  # [x] Require target path inside configured `notes_root`.
+  # [x] Resolve relation from first-level segment and require mapping.
+  # [x] Query by exact title + mapped relation.
+  # [] If local file exists and unique remote page exists: overwrite local file.
+  # [] If local file missing and unique remote page exists: create local file (including parent dirs).
+  # [] If no remote match: fail non-zero.
+  # [] If multiple matches: fail non-zero with ambiguity guidance.
+
+  local target="${1:-}"
+
+  if [[ -z "$target" ]]; then
+    echo "Error: download requires <file.md>"
+    notion_download_usage
+    return 1
+  fi
+
+  if [[ "$target" != *.md ]]; then
+    echo "Error: download requires a <*.md>"
+    notion_download_usage
+    return 1
+  fi
+
+  local abs_target="${target:a}"
+  local abs_target_path="${abs_target%/*}"
+  local abs_target_base="${abs_target##*/}"
+  local abs_target_name="${abs_target_base%.*}"
+
+  # echo "abs_target: $abs_target"
+  # echo "abs_target_path: $abs_target_path"
+  # echo "abs_target_base: $abs_target_base"
+  # echo "abs_target_name: $abs_target_name"
+
+  local config_path
+  config_path="$(find_config)" || {
+    echo "Error: No project config found. Run 'notion init' first."
+    return 1
+  }
+
+  # echo "$config_path"
+  local notes_root
+  notes_root="$(jq -r ".notes_root" "$config_path")"
+  local abs_notes_root="${notes_root:A}"
+  local canonical_notes_root canonical_target_path canonical_target
+  canonical_notes_root="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$abs_notes_root")"
+  canonical_target_path="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$abs_target_path")"
+  canonical_target="$canonical_target_path/$abs_target_base"
+
+  # echo "abs root $abs_notes_root"
+  # echo "file $abs_target"
+
+  if [[ "$abs_target" != "$abs_notes_root/"* && "$canonical_target" != "$canonical_notes_root/"* ]]; then
+    echo "Error: file must be inside notes_root: $canonical_notes_root"
+    return 1
+  fi
+
+  local relative_path="${canonical_target#$canonical_notes_root/}"
+  local first_seg="${relative_path%%/*}"
+
+  local relation_page_id
+  relation_page_id="$(jq -r --arg seg "$first_seg" '.mappings[$seg] // empty' "$config_path")"
+
+  if [[ -z "$relation_page_id" ]]; then
+    echo "Error: no mapping found for first-level directory '$first_seg'"
+    return 1
+  fi
+
+  local notion_token
+  notion_token="$(notion_require_token)" || return 1
+
+  local database_id
+  database_id="$(jq -r '.database_id // empty' "$config_path")"
+
+  if [[ -z "$database_id" ]]; then
+    echo "Error: database_id missing in config. Re-run notion init."
+    return 1
+  fi
+
+  local query_payload search_response
+  query_payload="$(jq -n --arg title "$abs_target_name" --arg relation "$relation_page_id" '{
+    filter: {
+      and: [
+        { property: "Name", title: { equals: $title } },
+        { property: "notebook", relation: { contains: $relation } }
+      ]
+    }
+  }')"
+
+  search_response="$(curl -sS -X POST "https://api.notion.com/v1/databases/$database_id/query" \
+    -H "Authorization: Bearer $notion_token" \
+    -H "Notion-Version: 2022-06-28" \
+    -H "Content-Type: application/json" \
+    --data "$query_payload")"
+
+  if echo "$search_response" | jq -e '.object == "error"' >/dev/null; then
+    echo "Error: Notion query failed: $(echo "$search_response" | jq -r '.message')"
+    return 1
+  fi
+
+  local match_count page_id
+  match_count="$(echo "$search_response" | jq '.results | length')"
+
+  if [[ "$match_count" -eq 0 ]]; then
+    echo "Error: no remote page found for '$abs_target_name' in relation '$first_seg'"
+    return 1
+  fi
+
+  if [[ "$match_count" -gt 1 ]]; then
+    echo "Error: ambiguous match for title '$abs_target_name' in relation '$first_seg' ($match_count pages)."
+    echo "Refine remote data so only one exact title+relation page exists."
+    return 1
+  fi
+
+  page_id="$(echo "$search_response" | jq -r '.results[0].id // empty')"
+  if [[ -z "$page_id" ]]; then
+    echo "Error: failed to resolve remote page id."
+    return 1
+  fi
+
+  local blocks_response
+  blocks_response="$(curl -sS -X GET "https://api.notion.com/v1/blocks/$page_id/children" \
+    -H "Authorization: Bearer $notion_token" \
+    -H "Notion-Version: 2022-06-28")"
+
+  if echo "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
+    echo "Error: Notion block fetch failed: $(echo "$blocks_response" | jq -r '.message')"
+    return 1
+  fi
+
+  local script_dir parser_path md_content
+  script_dir="${0:A:h}"
+  parser_path="${NOTION_PARSER_PATH:-$script_dir/../lib/notion_parser.py}"
+
+  if [[ ! -f "$parser_path" ]]; then
+    echo "Error: notion parser not found at $parser_path"
+    echo "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
+    return 1
+  fi
+
+  if ! md_content="$(echo "$blocks_response" | jq '.results' | python3 "$parser_path" --reverse)"; then
+    echo "Error: failed to convert notion blocks to markdown with $parser_path"
+    return 1
+  fi
+
+  mkdir -p "$abs_target_path"
+  printf "%s\n" "$md_content" >"$abs_target"
+  echo "Downloaded '$abs_target_name' to $abs_target"
+  return 0
 }
 
 notion_main() {
@@ -438,26 +587,26 @@ notion_main() {
   shift || true
 
   case "$cmd" in
-    help|-h|--help)
-      notion_usage
-      ;;
-    init)
-      notion_cmd_init "$@"
-      ;;
-    link)
-      notion_cmd_link "$@"
-      ;;
-    upload)
-      notion_cmd_upload "$@"
-      ;;
-    download)
-      notion_cmd_download "$@"
-      ;;
-    *)
-      echo "Unknown command: $cmd"
-      echo
-      notion_usage
-      return 1
-      ;;
+  help | -h | --help)
+    notion_usage
+    ;;
+  init)
+    notion_cmd_init "$@"
+    ;;
+  link)
+    notion_cmd_link "$@"
+    ;;
+  upload)
+    notion_cmd_upload "$@"
+    ;;
+  download)
+    notion_cmd_download "$@"
+    ;;
+  *)
+    echo "Unknown command: $cmd"
+    echo
+    notion_usage
+    return 1
+    ;;
   esac
 }
