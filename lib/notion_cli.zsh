@@ -35,6 +35,11 @@ notion_default_secrets_path() {
   echo "$HOME/.config/notion-cli/secrets.zsh"
 }
 
+notion_parser_path() {
+  local script_dir="${0:A:h}"
+  echo "${NOTION_PARSER_PATH:-$script_dir/../lib/notion_parser.py}"
+}
+
 notion_load_token() {
   local token="${NOTION_TOKEN-}"
   token="${token#"${token%%[![:space:]]*}"}"
@@ -323,8 +328,8 @@ notion_cmd_upload() {
   title="$(basename "$abs_file" .md)"
 
   # 7) Parse markdown with notion_parser.py and perform Notion API query/update/create.
-  local script_dir="${0:A:h}"
-  local parser_path="${NOTION_PARSER_PATH:-$script_dir/../lib/notion_parser.py}"
+  local parser_path
+  parser_path="$(notion_parser_path)"
   if [[ ! -f "$parser_path" ]]; then
     echo "Error: notion parser not found at $parser_path"
     echo "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
@@ -484,7 +489,12 @@ notion_cmd_download() {
     return 1
   fi
 
-  local relative_path="${canonical_target#$canonical_notes_root/}"
+  local relative_path
+  if [[ "$abs_target" == "$abs_notes_root/"* ]]; then
+    relative_path="${abs_target#$abs_notes_root/}"
+  else
+    relative_path="${canonical_target#$canonical_notes_root/}"
+  fi
   local first_seg="${relative_path%%/*}"
 
   local relation_page_id
@@ -557,9 +567,8 @@ notion_cmd_download() {
     return 1
   fi
 
-  local script_dir parser_path md_content
-  script_dir="${0:A:h}"
-  parser_path="${NOTION_PARSER_PATH:-$script_dir/../lib/notion_parser.py}"
+  local parser_path md_content
+  parser_path="$(notion_parser_path)"
 
   if [[ ! -f "$parser_path" ]]; then
     echo "Error: notion parser not found at $parser_path"
