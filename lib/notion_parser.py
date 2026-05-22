@@ -2,6 +2,40 @@ import sys
 import json
 import re
 
+NOTION_CODE_LANGUAGES = {
+    "abap", "abc", "agda", "arduino", "ascii art", "assembly", "bash", "basic", "bnf", "c", "c#",
+    "c++", "clojure", "coffeescript", "coq", "css", "dart", "dhall", "diff", "docker", "ebnf",
+    "elixir", "elm", "erlang", "f#", "flow", "fortran", "gherkin", "glsl", "go", "graphql",
+    "groovy", "haskell", "hcl", "html", "idris", "java", "javascript", "json", "julia", "kotlin",
+    "latex", "less", "lisp", "livescript", "llvm ir", "lua", "makefile", "markdown", "markup",
+    "matlab", "mathematica", "mermaid", "nix", "notion formula", "objective-c", "ocaml", "pascal",
+    "perl", "php", "plain text", "powershell", "prolog", "protobuf", "purescript", "python", "r",
+    "racket", "reason", "ruby", "rust", "sass", "scala", "scheme", "scss", "shell", "smalltalk",
+    "solidity", "sql", "swift", "toml", "typescript", "vb.net", "verilog", "vhdl", "visual basic",
+    "webassembly", "xml", "yaml", "java/c/c++/c#"
+}
+
+LANGUAGE_ALIASES = {
+    "plain_text": "plain text",
+    "plaintext": "plain text",
+    "text": "plain text",
+    "sh": "shell",
+    "zsh": "shell",
+    "py": "python",
+    "js": "javascript",
+    "ts": "typescript",
+    "yml": "yaml",
+    "md": "markdown",
+    "csv": "plain text"
+}
+
+def normalize_code_language(language):
+    if not language:
+        return "plain text"
+    normalized = language.strip().lower()
+    normalized = LANGUAGE_ALIASES.get(normalized, normalized)
+    return normalized if normalized in NOTION_CODE_LANGUAGES else "plain text"
+
 def parse_inline_text(text):
     """
     Parses bold and italics in a string and returns Notion rich_text objects.
@@ -98,7 +132,7 @@ def md_to_notion_blocks(md_text):
         if stripped.startswith("```"):
             in_code_block = True
             lang = stripped[3:].strip()
-            code_lang = lang if lang else "plain text"
+            code_lang = normalize_code_language(lang)
             code_lines = []
             continue
 
