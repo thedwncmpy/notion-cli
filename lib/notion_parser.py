@@ -231,7 +231,7 @@ def md_to_notion_blocks(md_text):
             }
         })
             
-    return blocks[:100]
+    return blocks
 
 def notion_blocks_to_md(blocks):
     """

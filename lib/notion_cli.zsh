@@ -342,9 +342,16 @@ notion_cmd_upload() {
     return 1
   fi
 
-  local blocks
-  if ! blocks="$(python3 "$parser_path" "$abs_file")"; then
+  local tmp_blocks
+  tmp_blocks="$(mktemp)"
+  if ! python3 "$parser_path" "$abs_file" > "$tmp_blocks"; then
+    rm -f "$tmp_blocks"
     echo "Error: failed to parse markdown with $parser_path"
+    return 1
+  fi
+  if ! jq -e . "$tmp_blocks" >/dev/null 2>&1; then
+    rm -f "$tmp_blocks"
+    echo "Error: parser produced invalid JSON for '$abs_file'"
     return 1
   fi
 
@@ -364,22 +371,25 @@ notion_cmd_upload() {
     -H "Content-Type: application/json" \
     --data "$filter")"
 
-  if echo "$search_response" | jq -e '.object == "error"' >/dev/null; then
-    echo "Error: Notion query failed: $(echo "$search_response" | jq -r '.message')"
+  if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
+    echo "Error: Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
     return 1
   fi
 
   # 8) Hard fail ambiguous exact matches (title + relation).
   local match_count
-  match_count="$(echo "$search_response" | jq '.results | length')"
+  match_count="$(printf '%s' "$search_response" | jq '.results | length')"
   if [[ "$match_count" -gt 1 ]]; then
     echo "Error: ambiguous match for title '$title' in relation '$first_segment' ($match_count pages)."
     echo "Refine remote data so only one exact title+relation page exists."
     return 1
   fi
 
+  local total_blocks
+  total_blocks="$(jq 'length' "$tmp_blocks")"
+
   local page_id response
-  page_id="$(echo "$search_response" | jq -r '.results[0].id // empty')"
+  page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
 
   if [[ -n "$page_id" ]]; then
     local existing_blocks block_id payload
@@ -393,26 +403,45 @@ notion_cmd_upload() {
         -H "Notion-Version: 2022-06-28" >/dev/null
     done
 
-    payload="$(jq -n --argjson child_blocks "$blocks" '{children: $child_blocks}')"
-    response="$(curl -sS -X PATCH "https://api.notion.com/v1/blocks/$page_id/children" \
-      -H "Authorization: Bearer $notion_token" \
-      -H "Notion-Version: 2022-06-28" \
-      -H "Content-Type: application/json" \
-      --data "$payload")"
+    local start chunk_payload
+    start=0
+    while [[ "$start" -lt "$total_blocks" ]]; do
+      chunk_payload="$(jq -n \
+        --argjson start "$start" \
+        --slurpfile child_blocks "$tmp_blocks" \
+        '{children: ($child_blocks[0][$start:($start+100)])}')"
+      response="$(curl -sS -X PATCH "https://api.notion.com/v1/blocks/$page_id/children" \
+        -H "Authorization: Bearer $notion_token" \
+        -H "Notion-Version: 2022-06-28" \
+        -H "Content-Type: application/json" \
+        --data "$chunk_payload")"
+      if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+        rm -f "$tmp_blocks"
+        echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
+        return 1
+      fi
+      start=$((start + 100))
+    done
   else
-    local payload
+    local payload first_chunk_count start chunk_payload
+    if [[ "$total_blocks" -gt 100 ]]; then
+      first_chunk_count=100
+    else
+      first_chunk_count="$total_blocks"
+    fi
     payload="$(jq -n \
       --arg db "$database_id" \
       --arg rel "$relation_page_id" \
       --arg page_title "$title" \
-      --argjson child_blocks "$blocks" \
+      --argjson first_chunk_count "$first_chunk_count" \
+      --slurpfile child_blocks "$tmp_blocks" \
       '{
         parent: { database_id: $db },
         properties: {
           Name: { title: [{ text: { content: $page_title } }] },
           notebook: { relation: [{ id: $rel }] }
         },
-        children: $child_blocks
+        children: ($child_blocks[0][0:$first_chunk_count])
       }')"
 
     response="$(curl -sS -X POST "https://api.notion.com/v1/pages" \
@@ -420,12 +449,41 @@ notion_cmd_upload() {
       -H "Notion-Version: 2022-06-28" \
       -H "Content-Type: application/json" \
       --data "$payload")"
+
+    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+      rm -f "$tmp_blocks"
+      echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
+      return 1
+    fi
+
+    page_id="$(printf '%s' "$response" | jq -r '.id // empty')"
+    if [[ -z "$page_id" ]]; then
+      rm -f "$tmp_blocks"
+      echo "Error: Notion sync failed: create response missing page id."
+      return 1
+    fi
+
+    start=100
+    while [[ "$start" -lt "$total_blocks" ]]; do
+      chunk_payload="$(jq -n \
+        --argjson start "$start" \
+        --slurpfile child_blocks "$tmp_blocks" \
+        '{children: ($child_blocks[0][$start:($start+100)])}')"
+      response="$(curl -sS -X PATCH "https://api.notion.com/v1/blocks/$page_id/children" \
+        -H "Authorization: Bearer $notion_token" \
+        -H "Notion-Version: 2022-06-28" \
+        -H "Content-Type: application/json" \
+        --data "$chunk_payload")"
+      if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+        rm -f "$tmp_blocks"
+        echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
+        return 1
+      fi
+      start=$((start + 100))
+    done
   fi
 
-  if echo "$response" | jq -e '.object == "error"' >/dev/null; then
-    echo "Error: Notion sync failed: $(echo "$response" | jq -r '.message')"
-    return 1
-  fi
+  rm -f "$tmp_blocks"
 
   echo "Uploaded '$title' successfully."
   return 0
@@ -529,13 +587,13 @@ notion_cmd_download() {
     -H "Content-Type: application/json" \
     --data "$query_payload")"
 
-  if echo "$search_response" | jq -e '.object == "error"' >/dev/null; then
-    echo "Error: Notion query failed: $(echo "$search_response" | jq -r '.message')"
+  if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
+    echo "Error: Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
     return 1
   fi
 
   local match_count page_id
-  match_count="$(echo "$search_response" | jq '.results | length')"
+  match_count="$(printf '%s' "$search_response" | jq '.results | length')"
 
   if [[ "$match_count" -eq 0 ]]; then
     echo "Error: no remote page found for '$abs_target_name' in relation '$first_seg'"
@@ -548,7 +606,7 @@ notion_cmd_download() {
     return 1
   fi
 
-  page_id="$(echo "$search_response" | jq -r '.results[0].id // empty')"
+  page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
   if [[ -z "$page_id" ]]; then
     echo "Error: failed to resolve remote page id."
     return 1
@@ -559,8 +617,8 @@ notion_cmd_download() {
     -H "Authorization: Bearer $notion_token" \
     -H "Notion-Version: 2022-06-28")"
 
-  if echo "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
-    echo "Error: Notion block fetch failed: $(echo "$blocks_response" | jq -r '.message')"
+  if printf '%s' "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
+    echo "Error: Notion block fetch failed: $(printf '%s' "$blocks_response" | jq -r '.message')"
     return 1
   fi
 
@@ -573,7 +631,7 @@ notion_cmd_download() {
     return 1
   fi
 
-  if ! md_content="$(echo "$blocks_response" | jq '.results' | python3 "$parser_path" --reverse)"; then
+  if ! md_content="$(printf '%s' "$blocks_response" | jq '.results' | python3 "$parser_path" --reverse)"; then
     echo "Error: failed to convert notion blocks to markdown with $parser_path"
     return 1
   fi
