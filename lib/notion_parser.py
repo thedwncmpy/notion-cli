@@ -72,9 +72,37 @@ def rich_text_to_md(rich_text_list):
 def md_to_notion_blocks(md_text):
     blocks = []
     lines = md_text.splitlines()
+    in_code_block = False
+    code_lang = "plain text"
+    code_lines = []
     
     for line in lines:
-        line = line.strip()
+        if in_code_block:
+            if line.strip().startswith("```"):
+                blocks.append({
+                    "object": "block",
+                    "type": "code",
+                    "code": {
+                        "rich_text": [{"text": {"content": "\n".join(code_lines)}}],
+                        "language": code_lang
+                    }
+                })
+                in_code_block = False
+                code_lang = "plain text"
+                code_lines = []
+            else:
+                code_lines.append(line)
+            continue
+
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = True
+            lang = stripped[3:].strip()
+            code_lang = lang if lang else "plain text"
+            code_lines = []
+            continue
+
+        line = stripped
         if not line:
             continue
             
@@ -158,6 +186,16 @@ def md_to_notion_blocks(md_text):
                 "type": "paragraph",
                 "paragraph": {"rich_text": parse_inline_text(line)}
             })
+
+    if in_code_block:
+        blocks.append({
+            "object": "block",
+            "type": "code",
+            "code": {
+                "rich_text": [{"text": {"content": "\n".join(code_lines)}}],
+                "language": code_lang
+            }
+        })
             
     return blocks[:100]
 
@@ -209,6 +247,14 @@ def notion_blocks_to_md(blocks):
                 md_lines.append(f"{prefix}{text}")
             elif b_type == "paragraph":
                 md_lines.append(text)
+            elif b_type == "code":
+                code_text = text
+                language = content.get("language", "plain text")
+                lang_suffix = "" if language in ["plain text", "plain_text"] else language
+                md_lines.append(f"```{lang_suffix}")
+                if code_text:
+                    md_lines.extend(code_text.split("\n"))
+                md_lines.append("```")
         
         prev_type = b_type
         

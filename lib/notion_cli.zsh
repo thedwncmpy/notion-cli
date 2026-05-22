@@ -37,6 +37,13 @@ notion_default_secrets_path() {
 
 notion_parser_path() {
   local this_file this_dir
+  this_file="${(%):-%x}"
+  this_dir="${this_file:A:h}"
+  echo "${NOTION_PARSER_PATH:-$this_dir/notion_parser.py}"
+}
+
+notion_parser_path() {
+  local this_file this_dir
   this_file="${(%):-%N}"
   this_dir="${this_file:A:h}"
   echo "${NOTION_PARSER_PATH:-$this_dir/notion_parser.py}"
