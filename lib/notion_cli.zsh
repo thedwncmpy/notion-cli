@@ -42,13 +42,6 @@ notion_parser_path() {
   echo "${NOTION_PARSER_PATH:-$this_dir/notion_parser.py}"
 }
 
-notion_parser_path() {
-  local this_file this_dir
-  this_file="${(%):-%N}"
-  this_dir="${this_file:A:h}"
-  echo "${NOTION_PARSER_PATH:-$this_dir/notion_parser.py}"
-}
-
 notion_load_token() {
   local token="${NOTION_TOKEN-}"
   token="${token#"${token%%[![:space:]]*}"}"
