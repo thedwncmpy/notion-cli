@@ -40,3 +40,4 @@ jobs:
           ./tests/test_slice7_roundtrip_contract.sh
           ./tests/test_slice8_homebrew.sh
           ./tests/test_slice10_reliability.sh
+          ./tests/test_slice11_p3.sh

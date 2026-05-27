@@ -144,6 +144,11 @@ notion_cmd_link() {
 }
 
 notion_cmd_upload() {
+  local dry_run=0
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    dry_run=1
+    shift
+  fi
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     notion_upload_usage
     return 0
@@ -203,6 +208,20 @@ notion_cmd_upload() {
     return 1
   fi
 
+  local title
+  title="$(basename "$abs_file" .md)"
+  if [[ "$dry_run" -eq 1 ]]; then
+    echo "Dry-run upload intent:"
+    echo "  file: $abs_file"
+    echo "  title: $title"
+    echo "  notes_root: $abs_notes_root"
+    echo "  mapping_dir: $first_segment"
+    echo "  relation_page_id: $relation_page_id"
+    echo "  relation_property: $relation_property"
+    echo "  action: query exact title+relation; update if found else create"
+    return 0
+  fi
+
   # 6) Require token via notion_require_token.
   if ! notion_require_token; then
     return 1
@@ -218,9 +237,6 @@ notion_cmd_upload() {
     echo "Error: database_id missing in config. Re-run notion init."
     return 1
   fi
-
-  local title
-  title="$(basename "$abs_file" .md)"
 
   # 7) Parse markdown with notion_parser.py and perform Notion API query/update/create.
   local parser_path
@@ -361,6 +377,11 @@ notion_cmd_upload() {
 
 notion_cmd_download() {
   # INFO: download <filename>
+  local dry_run=0
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    dry_run=1
+    shift
+  fi
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     notion_download_usage
     return 0
@@ -419,6 +440,18 @@ notion_cmd_download() {
   if [[ -z "$relation_page_id" ]]; then
     echo "Error: no mapping found for first-level directory '$first_seg'"
     return 1
+  fi
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    echo "Dry-run download intent:"
+    echo "  file: $abs_target"
+    echo "  title: $abs_target_name"
+    echo "  notes_root: $abs_notes_root"
+    echo "  mapping_dir: $first_seg"
+    echo "  relation_page_id: $relation_page_id"
+    echo "  relation_property: $relation_property"
+    echo "  action: query exact title+relation; overwrite local file if single match"
+    return 0
   fi
 
   local notion_token
@@ -515,6 +548,9 @@ notion_main() {
   link)
     notion_cmd_link "$@"
     ;;
+  status)
+    notion_cmd_status "$@"
+    ;;
   upload)
     notion_cmd_upload "$@"
     ;;
@@ -528,4 +564,79 @@ notion_main() {
     return 1
     ;;
   esac
+}
+
+notion_cmd_status() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_status_usage
+    return 0
+  fi
+
+  local file="${1:-}"
+  if [[ -z "$file" ]]; then
+    echo "Error: status requires <file.md>"
+    notion_status_usage
+    return 1
+  fi
+  if [[ "$file" != *.md ]]; then
+    echo "Error: status requires a <*.md>"
+    notion_status_usage
+    return 1
+  fi
+
+  local abs_file="${file:a}"
+  local title="${abs_file:t:r}"
+  local config_path
+  config_path="$(notion_find_and_prepare_config)" || {
+    echo "Error: No project config found. Run 'notion init' first."
+    return 1
+  }
+
+  local notes_root abs_notes_root
+  notes_root="$(notion_config_get_notes_root "$config_path")"
+  abs_notes_root="${notes_root:A}"
+  if ! notion_ensure_path_inside_notes_root "$abs_file" "$abs_notes_root"; then
+    echo "Error: file must be inside notes_root: $abs_notes_root"
+    return 1
+  fi
+
+  local relative_path first_segment
+  relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
+    echo "Error: file must be inside notes_root: $abs_notes_root"
+    return 1
+  }
+  first_segment="${relative_path%%/*}"
+
+  local database_id relation_page_id relation_property
+  database_id="$(notion_config_get_database_id "$config_path")"
+  relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
+  relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
+  if [[ -z "$relation_page_id" ]]; then
+    echo "Error: no mapping found for first-level directory '$first_segment'"
+    return 1
+  fi
+
+  local query_payload
+  query_payload="$(jq -n --arg title "$title" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
+    filter: {
+      and: [
+        { property: "Name", title: { equals: $title } },
+        { property: $rel_prop, relation: { contains: $relation } }
+      ]
+    }
+  }')"
+
+  echo "Status:"
+  echo "  file: $abs_file"
+  echo "  title: $title"
+  echo "  config: $config_path"
+  echo "  database_id: $database_id"
+  echo "  notes_root: $abs_notes_root"
+  echo "  relative_path: $relative_path"
+  echo "  mapping_dir: $first_segment"
+  echo "  relation_page_id: $relation_page_id"
+  echo "  relation_property: $relation_property"
+  echo "  upload_intent: query exact title+relation; update if found else create"
+  echo "  download_intent: query exact title+relation; overwrite local file if single match"
+  echo "  query_filter_json: $query_payload"
 }
