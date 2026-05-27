@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh jq shellcheck python3
+          sudo apt-get install -y zsh bash jq shellcheck python3
       - name: Syntax and lint
         run: |
           zsh -n lib/notion_cli.zsh
@@ -50,6 +50,7 @@ jobs:
           ./tests/test_slice10_reliability.sh
           ./tests/test_slice11_p3.sh
           ./tests/test_slice12_status_completion.sh
+          ./tests/test_slice13_bash_compat.sh
 
   bump-homebrew-tap:
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'

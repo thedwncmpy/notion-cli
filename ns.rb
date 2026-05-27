@@ -1,0 +1,1 @@
+../homebrew-notion-cli/Formula/ns.rb

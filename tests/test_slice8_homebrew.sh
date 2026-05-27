@@ -26,6 +26,7 @@ assert_contains "$formula_text" "class Ns < Formula"
 assert_contains "$formula_text" "bin.install \"bin/ns\""
 assert_contains "$formula_text" "def caveats"
 assert_contains "$formula_text" "eval \"\$(ns completion zsh)\""
+assert_contains "$formula_text" "eval \"\$(ns completion bash)\""
 assert_contains "$formula_text" "depends_on \"jq\""
 assert_contains "$formula_text" "depends_on \"python@3.12\""
 if [[ ! "$formula_text" =~ sha256[[:space:]]\"[0-9a-f]{64}\" ]]; then

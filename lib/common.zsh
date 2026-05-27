@@ -45,7 +45,7 @@ notion_status_usage() {
 }
 
 notion_completion_usage() {
-  notion_print_usage "Usage: ns completion zsh"
+  notion_print_usage "Usage: ns completion <zsh|bash>"
 }
 
 notion_is_tty() {

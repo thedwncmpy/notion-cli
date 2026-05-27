@@ -657,10 +657,49 @@ notion_cmd_completion() {
     notion_completion_usage
     return 0
   fi
-  if [[ "${1:-}" != "zsh" ]]; then
-    notion_print_error "completion requires shell target (supported: zsh)"
+  if [[ "${1:-}" != "zsh" && "${1:-}" != "bash" ]]; then
+    notion_print_error "completion requires shell target (supported: zsh, bash)"
     notion_completion_usage
     return 1
+  fi
+
+  if [[ "${1:-}" == "bash" ]]; then
+    cat <<'EOF'
+_ns() {
+  local cur prev cmd
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  cmd="${COMP_WORDS[1]}"
+
+  if [[ $COMP_CWORD -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "help init link status upload download completion" -- "$cur") )
+    return 0
+  fi
+
+  case "$cmd" in
+    init)
+      COMPREPLY=( $(compgen -W "--database-id --notes-root --force --help" -- "$cur") )
+      ;;
+    link)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -d -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--force --help" -- "$cur") )
+      fi
+      ;;
+    status|upload|download)
+      COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
+      ;;
+    completion)
+      COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
+      ;;
+  esac
+}
+
+complete -F _ns ns
+EOF
+    return 0
   fi
 
   cat <<'EOF'
@@ -697,7 +736,7 @@ _ns() {
           _arguments '1:markdown file:_files -g "*.md"'
           ;;
         completion)
-          _values 'shell' zsh
+          _values 'shell' zsh bash
           ;;
       esac
       ;;
@@ -707,3 +746,7 @@ _ns() {
 compdef _ns ns
 EOF
 }
+
+if [[ "${(%):-%N}" == "$0" ]]; then
+  notion_main "$@"
+fi
