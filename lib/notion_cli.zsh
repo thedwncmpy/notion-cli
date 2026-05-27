@@ -629,11 +629,13 @@ notion_cmd_status() {
     }
   }')"
 
-  local c_head c_key c_val c_reset
-  c_head="$(notion_color '1;36')"
-  c_key="$(notion_color '1;33')"
-  c_val="$(notion_color '0;37')"
-  c_reset="$(notion_color '0')"
+  local c_head="" c_key="" c_val="" c_reset=""
+  if notion_is_tty; then
+    c_head=$'\033[1;36m'
+    c_key=$'\033[1;33m'
+    c_val=$'\033[0;37m'
+    c_reset=$'\033[0m'
+  fi
 
   echo "${c_head}Status${c_reset}"
   echo "${c_key}  File${c_reset}: ${c_val}$abs_file${c_reset}"

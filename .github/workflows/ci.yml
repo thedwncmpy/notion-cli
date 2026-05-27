@@ -3,6 +3,8 @@ name: CI
 on:
   push:
   pull_request:
+  release:
+    types: [published]
 
 jobs:
   test:
@@ -42,3 +44,45 @@ jobs:
           ./tests/test_slice10_reliability.sh
           ./tests/test_slice11_p3.sh
           ./tests/test_slice12_status_completion.sh
+
+  bump-homebrew-tap:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: thedwncmpy/homebrew-notion-cli
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-notion-cli
+
+      - name: Update formula url/version/sha256
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          FORMULA="homebrew-notion-cli/Formula/ns.rb"
+          TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
+          SHA="$(curl -fsSL "$TARBALL_URL" | sha256sum | awk '{print $1}')"
+          VERSION="${TAG#v}"
+
+          sed -i "s|^\s*url \".*\"|  url \"$TARBALL_URL\"|" "$FORMULA"
+          sed -i "s|^\s*version \".*\"|  version \"$VERSION\"|" "$FORMULA"
+          sed -i "s|^\s*sha256 \".*\"|  sha256 \"$SHA\"|" "$FORMULA"
+
+      - name: Create pull request in tap repo
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-notion-cli
+          commit-message: "chore: bump ns formula to ${{ github.event.release.tag_name }}"
+          branch: "chore/bump-ns-${{ github.event.release.tag_name }}"
+          title: "chore: bump ns to ${{ github.event.release.tag_name }}"
+          body: |
+            Auto-generated from release `${{ github.event.release.tag_name }}` in `${{ github.repository }}`.
+          add-paths: |
+            Formula/ns.rb
