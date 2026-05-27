@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FORMULA="$ROOT_DIR/../homebrew-notion-cli/Formula/notion.rb"
-CLI="$ROOT_DIR/bin/notion"
+FORMULA="$ROOT_DIR/../homebrew-notion-cli/Formula/ns.rb"
+CLI="$ROOT_DIR/bin/ns"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -22,8 +22,8 @@ assert_contains() {
 [[ -x "$CLI" ]] || fail "missing executable: $CLI"
 
 formula_text="$(cat "$FORMULA")"
-assert_contains "$formula_text" "class Notion < Formula"
-assert_contains "$formula_text" "bin.install \"bin/notion\""
+assert_contains "$formula_text" "class Ns < Formula"
+assert_contains "$formula_text" "bin.install \"bin/ns\""
 assert_contains "$formula_text" "depends_on \"jq\""
 assert_contains "$formula_text" "depends_on \"python@3.12\""
 if [[ ! "$formula_text" =~ sha256[[:space:]]\"[0-9a-f]{64}\" ]]; then
@@ -40,7 +40,7 @@ set +e
 help_out="$($CLI help 2>&1)"
 help_code=$?
 set -e
-[[ "$help_code" -eq 0 ]] || fail "notion help failed"
-assert_contains "$help_out" "Usage: notion <command>"
+[[ "$help_code" -eq 0 ]] || fail "ns help failed"
+assert_contains "$help_out" "Usage: ns <command>"
 
 echo "PASS: slice 8 homebrew packaging contract"

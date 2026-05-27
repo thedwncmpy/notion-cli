@@ -6,7 +6,7 @@ The MVP keeps sync behavior deterministic:
 - Exact filename-stem to Notion title matching
 - First-level directory to relation mapping
 - Strict failures on ambiguity/mismatch
-- Single command surface: `notion`
+- Single command surface: `ns`
 
 ## Install
 
@@ -29,10 +29,10 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 ## Command Overview
 
 ```bash
-notion init --database-id <id> --notes-root <path> [--force]
-notion link <subdir> <relation_page_id> <relation_property> [--force]
-notion upload <file.md>
-notion download <file.md>
+ns init --database-id <id> --notes-root <path> [--force]
+ns link <subdir> <relation_page_id> <relation_property> [--force]
+ns upload <file.md>
+ns download <file.md>
 ```
 
 ## Quick Start
@@ -46,25 +46,25 @@ export NOTION_TOKEN="secret_xxx"
 2. Initialize a project:
 
 ```bash
-notion init --database-id <notion_db_id> --notes-root ./notes
+ns init --database-id <notion_db_id> --notes-root ./notes
 ```
 
 3. Map a first-level folder to a relation page id + relation property:
 
 ```bash
-notion link project rel_123 notebook
+ns link project rel_123 notebook
 ```
 
 4. Upload a note:
 
 ```bash
-notion upload ./notes/project/today.md
+ns upload ./notes/project/today.md
 ```
 
 5. Download a note (creates or overwrites local file):
 
 ```bash
-notion download ./notes/project/today.md
+ns download ./notes/project/today.md
 ```
 
 ## Config Shape

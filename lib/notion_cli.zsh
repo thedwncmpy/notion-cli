@@ -109,7 +109,7 @@ notion_cmd_link() {
 
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'notion init' first."
+    echo "Error: No project config found. Run 'ns init' first."
     return 1
   }
 
@@ -179,7 +179,7 @@ notion_cmd_upload() {
   # 3) Locate config via find_config; read notes_root + mappings.
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'notion init' first."
+    echo "Error: No project config found. Run 'ns init' first."
     return 1
   }
 
@@ -234,7 +234,7 @@ notion_cmd_upload() {
   database_id="$(notion_config_get_database_id "$config_path")"
 
   if [[ -z "$database_id" ]]; then
-    echo "Error: database_id missing in config. Re-run notion init."
+    echo "Error: database_id missing in config. Re-run ns init."
     return 1
   fi
 
@@ -413,7 +413,7 @@ notion_cmd_download() {
 
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'notion init' first."
+    echo "Error: No project config found. Run 'ns init' first."
     return 1
   }
 
@@ -461,7 +461,7 @@ notion_cmd_download() {
   database_id="$(notion_config_get_database_id "$config_path")"
 
   if [[ -z "$database_id" ]]; then
-    echo "Error: database_id missing in config. Re-run notion init."
+    echo "Error: database_id missing in config. Re-run ns init."
     return 1
   fi
 
@@ -588,7 +588,7 @@ notion_cmd_status() {
   local title="${abs_file:t:r}"
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'notion init' first."
+    echo "Error: No project config found. Run 'ns init' first."
     return 1
   }
 

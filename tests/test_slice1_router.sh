@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Determine the absolute path to the project root and the CLI binary
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="$ROOT_DIR/bin/notion"
+CLI="$ROOT_DIR/bin/ns"
 
 # Utility: print failure message and exit with non-zero status
 fail() {
@@ -33,20 +33,20 @@ assert_exit_code() {
   fi
 }
 
-# Ensure the notion CLI binary exists and is executable before running tests
+# Ensure the ns CLI binary exists and is executable before running tests
 if [[ ! -x "$CLI" ]]; then
   fail "missing executable: $CLI"
 fi
 
-# Test Case: Running 'notion' with no arguments should show usage and fail
+# Test Case: Running 'ns' with no arguments should show usage and fail
 set +e # Temporarily disable exit-on-error to capture the failure code
 out="$($CLI 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 1
-assert_contains "$out" "Usage: notion <command>"
+assert_contains "$out" "Usage: ns <command>"
 
-# Test Case: Running 'notion help' should show commands and succeed
+# Test Case: Running 'ns help' should show commands and succeed
 set +e
 out="$($CLI help 2>&1)"
 code=$?
@@ -74,7 +74,7 @@ for cmd in init link status upload download; do
   code=$?
   set -e
   assert_exit_code "$code" 0
-  assert_contains "$out" "Usage: notion $cmd"
+  assert_contains "$out" "Usage: ns $cmd"
 done
 
 echo "PASS: slice 1 router contract"

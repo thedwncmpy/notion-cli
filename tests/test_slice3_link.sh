@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="$ROOT_DIR/bin/notion"
+CLI="$ROOT_DIR/bin/ns"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -44,7 +44,7 @@ out="$($CLI link 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 1
-assert_contains "$out" "Usage: notion link"
+assert_contains "$out" "Usage: ns link"
 
 # 3. Test: Link non-existent directory should fail
 set +e

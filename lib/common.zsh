@@ -3,7 +3,7 @@ set -euo pipefail
 
 notion_usage() {
   cat <<'USAGE'
-Usage: notion <command> [options]
+Usage: ns <command> [options]
 
 Commands:
   init       Initialize notion project config
@@ -19,31 +19,31 @@ USAGE
 # Prints init command usage.
 # Example: notion_init_usage
 notion_init_usage() {
-  echo "Usage: notion init --database-id <id> --notes-root <path> [--force]"
+  echo "Usage: ns init --database-id <id> --notes-root <path> [--force]"
 }
 
 # Prints link command usage.
 # Example: notion_link_usage
 notion_link_usage() {
-  echo "Usage: notion link <subdir> <relation_page_id> <relation_property> [--force]"
+  echo "Usage: ns link <subdir> <relation_page_id> <relation_property> [--force]"
 }
 
 # Prints upload command usage.
 # Example: notion_upload_usage
 notion_upload_usage() {
-  echo "Usage: notion upload [--dry-run] <file.md>"
+  echo "Usage: ns upload [--dry-run] <file.md>"
 }
 
 # Prints download command usage.
 # Example: notion_download_usage
 notion_download_usage() {
-  echo "Usage: notion download [--dry-run] <file.md>"
+  echo "Usage: ns download [--dry-run] <file.md>"
 }
 
 # Prints status command usage.
 # Example: notion_status_usage
 notion_status_usage() {
-  echo "Usage: notion status <file.md>"
+  echo "Usage: ns status <file.md>"
 }
 
 # Returns default local secrets file path.

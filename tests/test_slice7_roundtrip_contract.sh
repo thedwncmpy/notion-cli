@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="$ROOT_DIR/bin/notion"
+CLI="$ROOT_DIR/bin/ns"
 
 fail() {
   echo "FAIL: $*" >&2

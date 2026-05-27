@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="$ROOT_DIR/bin/notion"
+CLI="$ROOT_DIR/bin/ns"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -44,7 +44,7 @@ out="$($CLI download --help 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$out" "Usage: notion download"
+assert_contains "$out" "Usage: ns download"
 
 # Missing file path should fail
 set +e
