@@ -1,243 +1,13 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
-notion_usage() {
-  cat <<'USAGE'
-Usage: notion <command> [options]
-
-Commands:
-  init       Initialize notion project config
-  link       Map a first-level subdirectory to a Notion relation page id
-  upload     Upload a markdown file to Notion
-  download   Download a markdown file from Notion
-  help       Show this help
-USAGE
-
-}
-
-notion_init_usage() {
-  echo "Usage: notion init --database-id <id> --notes-root <path> [--force]"
-}
-
-notion_link_usage() {
-  echo "Usage: notion link <subdir> <relation_page_id> <relation_property> [--force]"
-}
-
-notion_upload_usage() {
-  echo "Usage: notion upload <file.md>"
-}
-
-notion_download_usage() {
-  echo "Usage: notion download <file.md>"
-}
-
-notion_default_secrets_path() {
-  echo "$HOME/.config/notion-cli/secrets.zsh"
-}
-
-notion_parser_path() {
-  local this_file this_dir
-  this_file="${(%):-%x}"
-  this_dir="${this_file:A:h}"
-  echo "${NOTION_PARSER_PATH:-$this_dir/notion_parser.py}"
-}
-
-notion_load_token() {
-  local token="${NOTION_TOKEN-}"
-  token="${token#"${token%%[![:space:]]*}"}"
-  token="${token%"${token##*[![:space:]]}"}"
-  token="${token%"${token##*[![:space:]]}"}"
-
-  if [[ -n "${token}" ]]; then
-    echo "$token"
-    return 0
-  fi
-
-  local secrets_path
-  secrets_path="$(notion_default_secrets_path)"
-  [[ -f "$secrets_path" ]] && source "$secrets_path"
-
-  token="${NOTION_TOKEN-}"
-  token="${token#"${token%%[![:space:]]*}"}"
-  token="${token%"${token##*[![:space:]]}"}"
-
-  if [[ -n "${token}" ]]; then
-    echo "$token"
-    return 0
-  fi
-
-  return 1
-}
-
-notion_require_token() {
-  local res
-  if ! res="$(notion_load_token)"; then
-    echo "Error: Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)" >&2
-    return 1
-  fi
-
-  echo "$res"
-}
-
-json_escape() {
-  local value="$1"
-  value="${value//\\/\\\\}"
-  value="${value//\"/\\\"}"
-  value="${value//$'\n'/\\n}"
-  echo "$value"
-}
-
-notion_api_request() {
-  local method="$1"
-  local url="$2"
-  local token="$3"
-  local data="${4-}"
-  local max_attempts=3
-  local attempt=1
-  local response=""
-  local curl_exit=0
-
-  while [[ "$attempt" -le "$max_attempts" ]]; do
-    if [[ -n "$data" ]]; then
-      set +e
-      response="$(curl -sS -X "$method" "$url" \
-        -H "Authorization: Bearer $token" \
-        -H "Notion-Version: 2022-06-28" \
-        -H "Content-Type: application/json" \
-        --data "$data")"
-      curl_exit=$?
-      set -e
-    else
-      set +e
-      response="$(curl -sS -X "$method" "$url" \
-        -H "Authorization: Bearer $token" \
-        -H "Notion-Version: 2022-06-28")"
-      curl_exit=$?
-      set -e
-    fi
-
-    if [[ "$curl_exit" -eq 0 ]]; then
-      if printf '%s' "$response" | jq -e '.object == "error" and (.code == "rate_limited" or .code == "service_unavailable" or .code == "internal_server_error")' >/dev/null 2>&1; then
-        if [[ "$attempt" -lt "$max_attempts" ]]; then
-          sleep "$attempt"
-          attempt=$((attempt + 1))
-          continue
-        fi
-      fi
-      echo "$response"
-      return 0
-    fi
-
-    if [[ "$attempt" -lt "$max_attempts" ]]; then
-      sleep "$attempt"
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    echo "Error: Notion API request failed after $max_attempts attempts: $method $url" >&2
-    return 1
-  done
-}
-
-notion_query_all() {
-  local database_id="$1"
-  local token="$2"
-  local filter_payload="$3"
-  local cursor=""
-  local all='[]'
-  local response page_results has_more
-
-  while true; do
-    local payload="$filter_payload"
-    if [[ -n "$cursor" ]]; then
-      payload="$(printf '%s' "$filter_payload" | jq -c --arg cursor "$cursor" '. + {start_cursor: $cursor}')"
-    fi
-    response="$(notion_api_request "POST" "https://api.notion.com/v1/databases/$database_id/query" "$token" "$payload")" || return 1
-    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      echo "$response"
-      return 0
-    fi
-    page_results="$(printf '%s' "$response" | jq '.results')"
-    all="$(jq -n --argjson a "$all" --argjson b "$page_results" '$a + $b')"
-    has_more="$(printf '%s' "$response" | jq -r '.has_more // false')"
-    if [[ "$has_more" != "true" ]]; then
-      break
-    fi
-    cursor="$(printf '%s' "$response" | jq -r '.next_cursor // empty')"
-    if [[ -z "$cursor" ]]; then
-      break
-    fi
-  done
-
-  jq -n --argjson results "$all" '{results: $results}'
-}
-
-notion_fetch_all_children_ids() {
-  local page_id="$1"
-  local token="$2"
-  local cursor=""
-  local ids=()
-  local response has_more
-
-  while true; do
-    local url="https://api.notion.com/v1/blocks/$page_id/children"
-    if [[ -n "$cursor" ]]; then
-      url="$url?start_cursor=$cursor"
-    fi
-    response="$(notion_api_request "GET" "$url" "$token")" || return 1
-    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      echo "$response"
-      return 0
-    fi
-    local page_ids
-    page_ids="$(printf '%s' "$response" | jq -r '.results[].id')"
-    if [[ -n "$page_ids" ]]; then
-      ids+=("${(@f)page_ids}")
-    fi
-    has_more="$(printf '%s' "$response" | jq -r '.has_more // false')"
-    if [[ "$has_more" != "true" ]]; then
-      break
-    fi
-    cursor="$(printf '%s' "$response" | jq -r '.next_cursor // empty')"
-    if [[ -z "$cursor" ]]; then
-      break
-    fi
-  done
-
-  printf "%s\n" "${ids[@]-}"
-}
-
-notion_fetch_all_children_blocks() {
-  local page_id="$1"
-  local token="$2"
-  local cursor=""
-  local all='[]'
-  local response page_results has_more
-
-  while true; do
-    local url="https://api.notion.com/v1/blocks/$page_id/children"
-    if [[ -n "$cursor" ]]; then
-      url="$url?start_cursor=$cursor"
-    fi
-    response="$(notion_api_request "GET" "$url" "$token")" || return 1
-    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      echo "$response"
-      return 0
-    fi
-    page_results="$(printf '%s' "$response" | jq '.results')"
-    all="$(jq -n --argjson a "$all" --argjson b "$page_results" '$a + $b')"
-    has_more="$(printf '%s' "$response" | jq -r '.has_more // false')"
-    if [[ "$has_more" != "true" ]]; then
-      break
-    fi
-    cursor="$(printf '%s' "$response" | jq -r '.next_cursor // empty')"
-    if [[ -z "$cursor" ]]; then
-      break
-    fi
-  done
-
-  jq -n --argjson results "$all" '{results: $results}'
-}
+this_file="${(%):-%x}"
+this_dir="${this_file:A:h}"
+source "$this_dir/common.zsh"
+source "$this_dir/notion_api.zsh"
+source "$this_dir/config.zsh"
+source "$this_dir/relation_resolver.zsh"
+source "$this_dir/migrations.zsh"
 
 notion_cmd_init() {
   local database_id=""
@@ -290,43 +60,7 @@ notion_cmd_init() {
     return 1
   fi
 
-  local abs_notes_root="${notes_root:A}"
-  local cfg_dir="$abs_notes_root/.notion-cli"
-  local cfg_path="$cfg_dir/config.json"
-
-  if [[ -f "$cfg_path" && $force -ne 1 ]]; then
-    echo "Error: config already exists at $cfg_path (use --force to overwrite)"
-    return 1
-  fi
-
-  mkdir -p "$cfg_dir"
-
-  local db_escaped root_escaped
-  db_escaped="$(json_escape "$database_id")"
-  root_escaped="$(json_escape "$abs_notes_root")"
-
-  cat >"$cfg_path" <<JSON
-{
-  "version": 1,
-  "database_id": "$db_escaped",
-  "notes_root": "$root_escaped",
-  "mappings": {}
-}
-JSON
-
-  echo "Initialized config at $cfg_path"
-}
-
-find_config() {
-  local current_dir="${PWD:A}"
-  while [[ "$current_dir" != "/" ]]; do
-    if [[ -f "$current_dir/.notion-cli/config.json" ]]; then
-      echo "$current_dir/.notion-cli/config.json"
-      return 0
-    fi
-    current_dir="$(dirname "$current_dir")"
-  done
-  return 1
+  notion_init_config "$database_id" "$notes_root" "$force"
 }
 
 notion_cmd_link() {
@@ -374,13 +108,13 @@ notion_cmd_link() {
   fi
 
   local config_path
-  config_path="$(find_config)" || {
+  config_path="$(notion_find_and_prepare_config)" || {
     echo "Error: No project config found. Run 'notion init' first."
     return 1
   }
 
   local notes_root
-  notes_root="$(jq -r '.notes_root' "$config_path")"
+  notes_root="$(notion_config_get_notes_root "$config_path")"
 
   if [[ ! -d "$notes_root/$subdir" ]]; then
     echo "Error: directory does not exist: $notes_root/$subdir"
@@ -388,7 +122,7 @@ notion_cmd_link() {
   fi
 
   local existing_mapping
-  existing_mapping="$(jq -r ".mappings.\"$subdir\".relation_page_id // .mappings.\"$subdir\" // empty" "$config_path")"
+  existing_mapping="$(notion_config_get_mapping_relation_page_id "$config_path" "$subdir")"
 
   if [[ -n "$existing_mapping" && $force -ne 1 ]]; then
     echo "Error: '$subdir' is already mapped to '$existing_mapping' (use --force to overwrite)"
@@ -439,28 +173,31 @@ notion_cmd_upload() {
 
   # 3) Locate config via find_config; read notes_root + mappings.
   local config_path
-  config_path="$(find_config)" || {
+  config_path="$(notion_find_and_prepare_config)" || {
     echo "Error: No project config found. Run 'notion init' first."
     return 1
   }
 
   # 4) Ensure file is inside notes_root.
   local notes_root
-  notes_root="$(jq -r '.notes_root' "$config_path")"
+  notes_root="$(notion_config_get_notes_root "$config_path")"
   local abs_notes_root="${notes_root:A}"
-  if [[ "$abs_file" != "$abs_notes_root/"* ]]; then
+  if ! notion_ensure_path_inside_notes_root "$abs_file" "$abs_notes_root"; then
     echo "Error: file must be inside notes_root: $abs_notes_root"
     return 1
   fi
 
   # 5) Resolve first-level segment and require mapping.
   local relative_path first_segment
-  relative_path="${abs_file#$abs_notes_root/}"
+  relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
+    echo "Error: file must be inside notes_root: $abs_notes_root"
+    return 1
+  }
   first_segment="${relative_path%%/*}"
 
   local relation_page_id relation_property
-  relation_page_id="$(jq -r --arg seg "$first_segment" '.mappings[$seg].relation_page_id // .mappings[$seg] // empty' "$config_path")"
-  relation_property="$(jq -r --arg seg "$first_segment" '.mappings[$seg].relation_property // "notebook"' "$config_path")"
+  relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
+  relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
   if [[ -z "$relation_page_id" ]]; then
     echo "Error: no mapping found for first-level directory '$first_segment'"
     return 1
@@ -475,7 +212,7 @@ notion_cmd_upload() {
   notion_token="$(notion_require_token)"
 
   local database_id
-  database_id="$(jq -r '.database_id // empty' "$config_path")"
+  database_id="$(notion_config_get_database_id "$config_path")"
 
   if [[ -z "$database_id" ]]; then
     echo "Error: database_id missing in config. Re-run notion init."
@@ -654,39 +391,30 @@ notion_cmd_download() {
   # echo "abs_target_name: $abs_target_name"
 
   local config_path
-  config_path="$(find_config)" || {
+  config_path="$(notion_find_and_prepare_config)" || {
     echo "Error: No project config found. Run 'notion init' first."
     return 1
   }
 
   # echo "$config_path"
   local notes_root
-  notes_root="$(jq -r ".notes_root" "$config_path")"
+  notes_root="$(notion_config_get_notes_root "$config_path")"
   local abs_notes_root="${notes_root:A}"
-  local canonical_notes_root canonical_target_path canonical_target
-  canonical_notes_root="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$abs_notes_root")"
-  canonical_target_path="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$abs_target_path")"
-  canonical_target="$canonical_target_path/$abs_target_base"
-
-  # echo "abs root $abs_notes_root"
-  # echo "file $abs_target"
-
-  if [[ "$abs_target" != "$abs_notes_root/"* && "$canonical_target" != "$canonical_notes_root/"* ]]; then
-    echo "Error: file must be inside notes_root: $canonical_notes_root"
+  if ! notion_ensure_path_inside_notes_root "$abs_target" "$abs_notes_root"; then
+    echo "Error: file must be inside notes_root: $abs_notes_root"
     return 1
   fi
 
   local relative_path
-  if [[ "$abs_target" == "$abs_notes_root/"* ]]; then
-    relative_path="${abs_target#$abs_notes_root/}"
-  else
-    relative_path="${canonical_target#$canonical_notes_root/}"
-  fi
+  relative_path="$(notion_relative_path_under_notes_root "$abs_target" "$abs_notes_root")" || {
+    echo "Error: file must be inside notes_root: $abs_notes_root"
+    return 1
+  }
   local first_seg="${relative_path%%/*}"
 
   local relation_page_id relation_property
-  relation_page_id="$(jq -r --arg seg "$first_seg" '.mappings[$seg].relation_page_id // .mappings[$seg] // empty' "$config_path")"
-  relation_property="$(jq -r --arg seg "$first_seg" '.mappings[$seg].relation_property // "notebook"' "$config_path")"
+  relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_seg")"
+  relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_seg")"
 
   if [[ -z "$relation_page_id" ]]; then
     echo "Error: no mapping found for first-level directory '$first_seg'"
@@ -697,7 +425,7 @@ notion_cmd_download() {
   notion_token="$(notion_require_token)" || return 1
 
   local database_id
-  database_id="$(jq -r '.database_id // empty' "$config_path")"
+  database_id="$(notion_config_get_database_id "$config_path")"
 
   if [[ -z "$database_id" ]]; then
     echo "Error: database_id missing in config. Re-run notion init."

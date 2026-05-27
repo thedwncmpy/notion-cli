@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh jq shellcheck python3
+      - name: Syntax and lint
+        run: |
+          zsh -n lib/notion_cli.zsh
+          zsh -n lib/common.zsh
+          zsh -n lib/notion_api.zsh
+          zsh -n lib/config.zsh
+          zsh -n lib/relation_resolver.zsh
+          zsh -n lib/migrations.zsh
+          shellcheck -s bash tests/*.sh
+      - name: Run contract tests
+        run: |
+          ./tests/test_slice1_router.sh
+          ./tests/test_slice2_init.sh
+          ./tests/test_slice3_link.sh
+          ./tests/test_slice4_credentials.sh
+          ./tests/test_slice5_upload.sh
+          ./tests/test_slice6_download.sh
+          ./tests/test_slice7_roundtrip_contract.sh
+          ./tests/test_slice8_homebrew.sh
+          ./tests/test_slice10_reliability.sh
