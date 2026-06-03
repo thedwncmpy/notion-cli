@@ -40,7 +40,7 @@ notion_api_request() {
           continue
         fi
       fi
-      echo "$response"
+      printf '%s\n' "$response"
       return 0
     fi
 
@@ -72,7 +72,7 @@ notion_query_all() {
     fi
     response="$(notion_api_request "POST" "https://api.notion.com/v1/databases/$database_id/query" "$token" "$payload")" || return 1
     if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      echo "$response"
+      printf '%s\n' "$response"
       return 0
     fi
     page_results="$(printf '%s' "$response" | jq '.results')"
@@ -106,7 +106,7 @@ notion_fetch_all_children_ids() {
     fi
     response="$(notion_api_request "GET" "$url" "$token")" || return 1
     if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      echo "$response"
+      printf '%s\n' "$response"
       return 0
     fi
     local page_ids
@@ -143,7 +143,7 @@ notion_fetch_all_children_blocks() {
     fi
     response="$(notion_api_request "GET" "$url" "$token")" || return 1
     if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      echo "$response"
+      printf '%s\n' "$response"
       return 0
     fi
     page_results="$(printf '%s' "$response" | jq '.results')"

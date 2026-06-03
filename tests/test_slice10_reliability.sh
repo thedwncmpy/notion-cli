@@ -73,7 +73,7 @@ elif [[ "$args" == *"/v1/databases/"*"/query"* ]]; then
     printf '{"results":[{"id":"page_existing"}],"has_more":false}'
   fi
 elif [[ "$args" == *"-X GET"*"/v1/blocks/page_nested/children?start_cursor=cursor1"* ]]; then
-  printf '{"results":[{"id":"b4","type":"paragraph","paragraph":{"rich_text":[{"type":"text","text":{"content":"p2"}}]}}],"has_more":false}'
+  printf '{"results":[{"id":"b4","type":"paragraph","paragraph":{"rich_text":[{"type":"text","text":{"content":"literal \\\\( paren"}}]}}],"has_more":false}'
 elif [[ "$args" == *"-X GET"*"/v1/blocks/page_nested/children"* ]]; then
   printf '{"results":[{"id":"b3","type":"paragraph","paragraph":{"rich_text":[{"type":"text","text":{"content":"p1"}}]}}],"has_more":true,"next_cursor":"cursor1"}'
 elif [[ "$args" == *"-X PATCH"*"/v1/pages/page_existing"* ]]; then
