@@ -222,8 +222,8 @@ notion_cmd_upload() {
     return 0
   fi
 
-  # 6) Require token via notion_require_token.
-  if ! notion_require_token; then
+  # 6) Require token without leaking it to stdout.
+  if ! notion_require_token >/dev/null; then
     return 1
   fi
 
@@ -293,29 +293,16 @@ notion_cmd_upload() {
   page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
 
   if [[ -n "$page_id" ]]; then
-    local existing_blocks block_id payload
-    existing_blocks="$(notion_fetch_all_children_ids "$page_id" "$notion_token")" || return 1
+    response="$(notion_api_request "PATCH" "https://api.notion.com/v1/pages/$page_id" "$notion_token" '{"archived":true}')" || return 1
+    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+      rm -f "$tmp_blocks"
+      notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
+      return 1
+    fi
+    page_id=""
+  fi
 
-    for block_id in ${(f)existing_blocks}; do
-      notion_api_request "DELETE" "https://api.notion.com/v1/blocks/$block_id" "$notion_token" >/dev/null || return 1
-    done
-
-    local start chunk_payload
-    start=0
-    while [[ "$start" -lt "$total_blocks" ]]; do
-      chunk_payload="$(jq -n \
-        --argjson start "$start" \
-        --slurpfile child_blocks "$tmp_blocks" \
-        '{children: ($child_blocks[0][$start:($start+100)])}')"
-      response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$page_id/children" "$notion_token" "$chunk_payload")" || return 1
-      if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-        rm -f "$tmp_blocks"
-        notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
-        return 1
-      fi
-      start=$((start + 100))
-    done
-  else
+  if [[ -z "$page_id" ]]; then
     local payload first_chunk_count start chunk_payload
     if [[ "$total_blocks" -gt 100 ]]; then
       first_chunk_count=100

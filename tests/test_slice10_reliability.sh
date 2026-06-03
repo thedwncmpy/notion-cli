@@ -72,16 +72,12 @@ elif [[ "$args" == *"/v1/databases/"*"/query"* ]]; then
   else
     printf '{"results":[{"id":"page_existing"}],"has_more":false}'
   fi
-elif [[ "$args" == *"-X GET"*"/v1/blocks/page_existing/children?start_cursor=cursor1"* ]]; then
-  printf '{"results":[{"id":"b2"}],"has_more":false}'
-elif [[ "$args" == *"-X GET"*"/v1/blocks/page_existing/children"* ]]; then
-  printf '{"results":[{"id":"b1"}],"has_more":true,"next_cursor":"cursor1"}'
 elif [[ "$args" == *"-X GET"*"/v1/blocks/page_nested/children?start_cursor=cursor1"* ]]; then
   printf '{"results":[{"id":"b4","type":"paragraph","paragraph":{"rich_text":[{"type":"text","text":{"content":"p2"}}]}}],"has_more":false}'
 elif [[ "$args" == *"-X GET"*"/v1/blocks/page_nested/children"* ]]; then
   printf '{"results":[{"id":"b3","type":"paragraph","paragraph":{"rich_text":[{"type":"text","text":{"content":"p1"}}]}}],"has_more":true,"next_cursor":"cursor1"}'
-elif [[ "$args" == *"-X DELETE"*"/v1/blocks/"* ]]; then
-  printf '{"object":"block"}'
+elif [[ "$args" == *"-X PATCH"*"/v1/pages/page_existing"* ]]; then
+  printf '{"id":"page_existing","archived":true}'
 elif [[ "$args" == *"-X PATCH"*"/v1/blocks/page_existing/children"* ]]; then
   printf '{"id":"page_existing"}'
 elif [[ "$args" == *"-X PATCH"*"/v1/blocks/page_new/children"* ]]; then
@@ -104,19 +100,21 @@ export SLICE10_STATE="$tmp_dir/state"
 printf "seed\n" > "$notes_root/project/create-large.md"
 out="$(cd "$notes_root" && "$CLI" upload "project/create-large.md" 2>&1)"
 assert_contains "$out" "Uploaded 'create-large' successfully."
+if [[ "$out" == *"test_token"* ]]; then
+  fail "upload leaked NOTION_TOKEN to stdout"
+fi
 create_post_count="$(grep -c -- "-X POST https://api.notion.com/v1/pages" "$SLICE10_CURL_LOG" || true)"
 [[ "$create_post_count" -eq 2 ]] || fail "expected 2 POST /v1/pages calls due to retry, got $create_post_count"
 
-# Existing page upload should fetch paginated children and delete both ids.
+# Existing page upload should archive the old page and create a replacement.
 printf "seed2\n" > "$notes_root/project/existing.md"
 out="$(cd "$notes_root" && "$CLI" upload "project/existing.md" 2>&1)"
 assert_contains "$out" "Uploaded 'existing' successfully."
-assert_contains "$(cat "$SLICE10_CURL_LOG")" "/v1/blocks/b1"
-assert_contains "$(cat "$SLICE10_CURL_LOG")" "/v1/blocks/b2"
+assert_contains "$(cat "$SLICE10_CURL_LOG")" "-X PATCH https://api.notion.com/v1/pages/page_existing"
 
-# Ensure chunking occurred: for 250 blocks on create path, one POST + two PATCH calls.
+# Ensure chunking occurred: both create paths use one POST + two PATCH calls for 250 blocks each.
 patch_count="$(grep -c -- "-X PATCH https://api.notion.com/v1/blocks/page_new/children" "$SLICE10_CURL_LOG" || true)"
-[[ "$patch_count" -eq 2 ]] || fail "expected 2 PATCH calls for page_new, got $patch_count"
+[[ "$patch_count" -eq 4 ]] || fail "expected 4 PATCH calls for page_new across two uploads, got $patch_count"
 
 # Nested download should succeed and create parent directories while using paginated block fetch.
 out="$(cd "$notes_root" && "$CLI" download "project/deep/nested/nested-note.md" 2>&1)"
