@@ -42,9 +42,10 @@ def parse_inline_text(text):
     """
     parts = []
     remaining = text
+    flags = re.DOTALL
     while remaining:
         # Bold + Italic (***text***)
-        bi_match = re.match(r'^(\*\*\*|___)(.*?)\1(.*)', remaining)
+        bi_match = re.match(r'^(\*\*\*|___)(.*?)\1(.*)', remaining, flags)
         if bi_match:
             parts.append({
                 "text": {"content": bi_match.group(2)},
@@ -54,7 +55,7 @@ def parse_inline_text(text):
             continue
 
         # Bold (**text**)
-        bold_match = re.match(r'^(\*\*|__)(.*?)\1(.*)', remaining)
+        bold_match = re.match(r'^(\*\*|__)(.*?)\1(.*)', remaining, flags)
         if bold_match:
             parts.append({
                 "text": {"content": bold_match.group(2)},
@@ -64,7 +65,7 @@ def parse_inline_text(text):
             continue
 
         # Italic (*text*)
-        italic_match = re.match(r'^(\*|_)(.*?)\1(.*)', remaining)
+        italic_match = re.match(r'^(\*|_)(.*?)\1(.*)', remaining, flags)
         if italic_match:
             parts.append({
                 "text": {"content": italic_match.group(2)},
@@ -74,7 +75,7 @@ def parse_inline_text(text):
             continue
             
         # Plain text
-        plain_match = re.match(r'^([^*_]+)(.*)', remaining)
+        plain_match = re.match(r'^([^*_]+)(.*)', remaining, flags)
         if plain_match:
             parts.append({"text": {"content": plain_match.group(1)}})
             remaining = plain_match.group(2)
