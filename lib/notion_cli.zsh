@@ -143,6 +143,54 @@ notion_cmd_link() {
   notion_print_success "Linked '$subdir' to '$relation_page_id' using property '$relation_property' in $config_path"
 }
 
+notion_build_query_payload() {
+  local title="$1"
+  local relation_page_id="${2:-}"
+  local relation_property="${3:-}"
+
+  if [[ -n "$relation_page_id" ]]; then
+    jq -n --arg title "$title" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
+      filter: {
+        and: [
+          { property: "Name", title: { equals: $title } },
+          { property: $rel_prop, relation: { contains: $relation } }
+        ]
+      }
+    }'
+  else
+    jq -n --arg title "$title" '{
+      filter: {
+        property: "Name",
+        title: { equals: $title }
+      }
+    }'
+  fi
+}
+
+notion_print_sync_intent() {
+  local action="$1"
+  local file_path="$2"
+  local title="$3"
+  local notes_root="$4"
+  local mapping_dir="$5"
+  local relation_page_id="${6:-}"
+  local relation_property="${7:-}"
+
+  echo "  file: $file_path"
+  echo "  title: $title"
+  echo "  notes_root: $notes_root"
+  echo "  mapping_dir: $mapping_dir"
+  if [[ -n "$relation_page_id" ]]; then
+    echo "  relation_page_id: $relation_page_id"
+    echo "  relation_property: $relation_property"
+    echo "  action: $action"
+  else
+    echo "  relation_page_id: <none>"
+    echo "  relation_property: <none>"
+    echo "  action: $action"
+  fi
+}
+
 notion_cmd_upload() {
   local dry_run=0
   if [[ "${1:-}" == "--dry-run" ]]; then
@@ -203,7 +251,7 @@ notion_cmd_upload() {
   local relation_page_id relation_property
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
-  if [[ -z "$relation_page_id" ]]; then
+  if [[ -z "$relation_page_id" ]] && ! notion_is_root_level_relative_path "$relative_path"; then
     notion_print_error "no mapping found for first-level directory '$first_segment'"
     return 1
   fi
@@ -212,13 +260,11 @@ notion_cmd_upload() {
   title="$(basename "$abs_file" .md)"
   if [[ "$dry_run" -eq 1 ]]; then
     notion_print_info "Dry-run upload intent:"
-    echo "  file: $abs_file"
-    echo "  title: $title"
-    echo "  notes_root: $abs_notes_root"
-    echo "  mapping_dir: $first_segment"
-    echo "  relation_page_id: $relation_page_id"
-    echo "  relation_property: $relation_property"
-    echo "  action: query exact title+relation; update if found else create"
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_sync_intent "query exact title+relation; update if found else create" "$abs_file" "$title" "$abs_notes_root" "$first_segment" "$relation_page_id" "$relation_property"
+    else
+      notion_print_sync_intent "query exact title; update if found else create" "$abs_file" "$title" "$abs_notes_root" "$first_segment" "$relation_page_id" "$relation_property"
+    fi
     return 0
   fi
 
@@ -261,14 +307,7 @@ notion_cmd_upload() {
   fi
 
   local filter search_response
-  filter="$(jq -n --arg title "$title" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
-    filter: {
-      and: [
-        { property: "Name", title: { equals: $title } },
-        { property: $rel_prop, relation: { contains: $relation } }
-      ]
-    }
-  }')"
+  filter="$(notion_build_query_payload "$title" "$relation_page_id" "$relation_property")"
 
   search_response="$(notion_query_all "$database_id" "$notion_token" "$filter")" || return 1
 
@@ -281,8 +320,13 @@ notion_cmd_upload() {
   local match_count
   match_count="$(printf '%s' "$search_response" | jq '.results | length')"
   if [[ "$match_count" -gt 1 ]]; then
-    notion_print_error "ambiguous match for title '$title' in relation '$first_segment' ($match_count pages)."
-    notion_print_warn "Refine remote data so only one exact title+relation page exists."
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_error "ambiguous match for title '$title' in relation '$first_segment' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title+relation page exists."
+    else
+      notion_print_error "ambiguous match for title '$title' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title page exists."
+    fi
     return 1
   fi
 
@@ -309,21 +353,36 @@ notion_cmd_upload() {
     else
       first_chunk_count="$total_blocks"
     fi
-    payload="$(jq -n \
-      --arg db "$database_id" \
-      --arg rel "$relation_page_id" \
-      --arg rel_prop "$relation_property" \
-      --arg page_title "$title" \
-      --argjson first_chunk_count "$first_chunk_count" \
-      --slurpfile child_blocks "$tmp_blocks" \
-      '{
-        parent: { database_id: $db },
-        properties: {
-          Name: { title: [{ text: { content: $page_title } }] },
-          ($rel_prop): { relation: [{ id: $rel }] }
-        },
-        children: ($child_blocks[0][0:$first_chunk_count])
-      }')"
+    if [[ -n "$relation_page_id" ]]; then
+      payload="$(jq -n \
+        --arg db "$database_id" \
+        --arg rel "$relation_page_id" \
+        --arg rel_prop "$relation_property" \
+        --arg page_title "$title" \
+        --argjson first_chunk_count "$first_chunk_count" \
+        --slurpfile child_blocks "$tmp_blocks" \
+        '{
+          parent: { database_id: $db },
+          properties: {
+            Name: { title: [{ text: { content: $page_title } }] },
+            ($rel_prop): { relation: [{ id: $rel }] }
+          },
+          children: ($child_blocks[0][0:$first_chunk_count])
+        }')"
+    else
+      payload="$(jq -n \
+        --arg db "$database_id" \
+        --arg page_title "$title" \
+        --argjson first_chunk_count "$first_chunk_count" \
+        --slurpfile child_blocks "$tmp_blocks" \
+        '{
+          parent: { database_id: $db },
+          properties: {
+            Name: { title: [{ text: { content: $page_title } }] }
+          },
+          children: ($child_blocks[0][0:$first_chunk_count])
+        }')"
+    fi
 
     response="$(notion_api_request "POST" "https://api.notion.com/v1/pages" "$notion_token" "$payload")" || return 1
 
@@ -424,20 +483,18 @@ notion_cmd_download() {
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_seg")"
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_seg")"
 
-  if [[ -z "$relation_page_id" ]]; then
+  if [[ -z "$relation_page_id" ]] && ! notion_is_root_level_relative_path "$relative_path"; then
     notion_print_error "no mapping found for first-level directory '$first_seg'"
     return 1
   fi
 
   if [[ "$dry_run" -eq 1 ]]; then
     notion_print_info "Dry-run download intent:"
-    echo "  file: $abs_target"
-    echo "  title: $abs_target_name"
-    echo "  notes_root: $abs_notes_root"
-    echo "  mapping_dir: $first_seg"
-    echo "  relation_page_id: $relation_page_id"
-    echo "  relation_property: $relation_property"
-    echo "  action: query exact title+relation; overwrite local file if single match"
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_sync_intent "query exact title+relation; overwrite local file if single match" "$abs_target" "$abs_target_name" "$abs_notes_root" "$first_seg" "$relation_page_id" "$relation_property"
+    else
+      notion_print_sync_intent "query exact title; overwrite local file if single match" "$abs_target" "$abs_target_name" "$abs_notes_root" "$first_seg" "$relation_page_id" "$relation_property"
+    fi
     return 0
   fi
 
@@ -453,14 +510,7 @@ notion_cmd_download() {
   fi
 
   local query_payload search_response
-  query_payload="$(jq -n --arg title "$abs_target_name" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
-    filter: {
-      and: [
-        { property: "Name", title: { equals: $title } },
-        { property: $rel_prop, relation: { contains: $relation } }
-      ]
-    }
-  }')"
+  query_payload="$(notion_build_query_payload "$abs_target_name" "$relation_page_id" "$relation_property")"
 
   search_response="$(notion_query_all "$database_id" "$notion_token" "$query_payload")" || return 1
 
@@ -473,13 +523,22 @@ notion_cmd_download() {
   match_count="$(printf '%s' "$search_response" | jq '.results | length')"
 
   if [[ "$match_count" -eq 0 ]]; then
-    notion_print_error "no remote page found for '$abs_target_name' in relation '$first_seg'"
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_error "no remote page found for '$abs_target_name' in relation '$first_seg'"
+    else
+      notion_print_error "no remote page found for '$abs_target_name'"
+    fi
     return 1
   fi
 
   if [[ "$match_count" -gt 1 ]]; then
-    notion_print_error "ambiguous match for title '$abs_target_name' in relation '$first_seg' ($match_count pages)."
-    notion_print_warn "Refine remote data so only one exact title+relation page exists."
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_error "ambiguous match for title '$abs_target_name' in relation '$first_seg' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title+relation page exists."
+    else
+      notion_print_error "ambiguous match for title '$abs_target_name' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title page exists."
+    fi
     return 1
   fi
 
@@ -608,20 +667,13 @@ notion_cmd_status() {
   database_id="$(notion_config_get_database_id "$config_path")"
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
-  if [[ -z "$relation_page_id" ]]; then
+  if [[ -z "$relation_page_id" ]] && ! notion_is_root_level_relative_path "$relative_path"; then
     notion_print_error "no mapping found for first-level directory '$first_segment'"
     return 1
   fi
 
   local query_payload
-  query_payload="$(jq -n --arg title "$title" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
-    filter: {
-      and: [
-        { property: "Name", title: { equals: $title } },
-        { property: $rel_prop, relation: { contains: $relation } }
-      ]
-    }
-  }')"
+  query_payload="$(notion_build_query_payload "$title" "$relation_page_id" "$relation_property")"
 
   local c_head="" c_key="" c_val="" c_reset=""
   if notion_is_tty; then
@@ -639,10 +691,15 @@ notion_cmd_status() {
   echo "${c_key}  Notes Root${c_reset}: ${c_val}$abs_notes_root${c_reset}"
   echo "${c_key}  Relative Path${c_reset}: ${c_val}$relative_path${c_reset}"
   echo "${c_key}  Mapping Dir${c_reset}: ${c_val}$first_segment${c_reset}"
-  echo "${c_key}  Relation Page${c_reset}: ${c_val}$relation_page_id${c_reset}"
-  echo "${c_key}  Relation Prop${c_reset}: ${c_val}$relation_property${c_reset}"
-  echo "${c_key}  Upload Intent${c_reset}: ${c_val}query exact title+relation; update if found else create${c_reset}"
-  echo "${c_key}  Download Intent${c_reset}: ${c_val}query exact title+relation; overwrite local file if single match${c_reset}"
+  echo "${c_key}  Relation Page${c_reset}: ${c_val}${relation_page_id:-<none>}${c_reset}"
+  echo "${c_key}  Relation Prop${c_reset}: ${c_val}${relation_property:-<none>}${c_reset}"
+  if [[ -n "$relation_page_id" ]]; then
+    echo "${c_key}  Upload Intent${c_reset}: ${c_val}query exact title+relation; update if found else create${c_reset}"
+    echo "${c_key}  Download Intent${c_reset}: ${c_val}query exact title+relation; overwrite local file if single match${c_reset}"
+  else
+    echo "${c_key}  Upload Intent${c_reset}: ${c_val}query exact title; update if found else create${c_reset}"
+    echo "${c_key}  Download Intent${c_reset}: ${c_val}query exact title; overwrite local file if single match${c_reset}"
+  fi
   echo "${c_key}  Query Filter${c_reset}: ${c_val}$query_payload${c_reset}"
 }
 

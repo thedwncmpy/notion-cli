@@ -67,3 +67,10 @@ notion_first_segment_for_file() {
   rel="$(notion_relative_path_under_notes_root "$target_path" "$notes_root")" || return 1
   echo "${rel%%/*}"
 }
+
+# Returns success when a relative path points to a file directly under notes_root.
+# Example: notion_is_root_level_relative_path "Tasks.md"
+notion_is_root_level_relative_path() {
+  local relative_path="$1"
+  [[ "$relative_path" != */* ]]
+}
