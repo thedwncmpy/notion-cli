@@ -34,15 +34,24 @@ fi
 
 input_md="$tmp_dir/toggle.md"
 cat > "$input_md" <<'EOF'
+## [toggle] Collapsible H2
+  Child under h2
+
 ### [toggle] Collapsible Section
 	Paragraph inside toggle
   
   - Nested item
 
 ### Plain Section
+
+#[toggle] invalid
 EOF
 
 json_out="$(python3 "$PARSER" "$input_md")"
+assert_contains "$json_out" '"type": "heading_2"'
+assert_contains "$json_out" '"is_toggleable": true'
+assert_contains "$json_out" '"content": "Collapsible H2"'
+assert_contains "$json_out" '"content": "Child under h2"'
 assert_contains "$json_out" '"type": "heading_3"'
 assert_contains "$json_out" '"is_toggleable": true'
 assert_contains "$json_out" '"content": "Collapsible Section"'
@@ -56,6 +65,60 @@ assert_contains "$json_out" '"content": "Plain Section"'
 reverse_in="$tmp_dir/blocks.json"
 cat > "$reverse_in" <<'EOF'
 [
+  {
+    "object": "block",
+    "type": "heading_1",
+    "heading_1": {
+      "rich_text": [
+        {
+          "plain_text": "Top Toggle",
+          "annotations": {}
+        }
+      ],
+      "is_toggleable": true,
+      "children": [
+        {
+          "object": "block",
+          "type": "paragraph",
+          "paragraph": {
+            "rich_text": [
+              {
+                "plain_text": "Paragraph inside h1 toggle",
+                "annotations": {}
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "object": "block",
+    "type": "heading_2",
+    "heading_2": {
+      "rich_text": [
+        {
+          "plain_text": "Mid Toggle",
+          "annotations": {}
+        }
+      ],
+      "is_toggleable": true,
+      "children": [
+        {
+          "object": "block",
+          "type": "paragraph",
+          "paragraph": {
+            "rich_text": [
+              {
+                "plain_text": "Paragraph inside h2 toggle",
+                "annotations": {}
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
   {
     "object": "block",
     "type": "heading_3",
@@ -112,11 +175,16 @@ cat > "$reverse_in" <<'EOF'
 EOF
 
 md_out="$(python3 "$PARSER" --reverse < "$reverse_in")"
-expected_md=$'### [toggle] Collapsible Section\n\n  Paragraph inside toggle\n\n  - Nested item\n\n### Plain Section'
+expected_md=$'# [toggle] Top Toggle\n\n  Paragraph inside h1 toggle\n\n## [toggle] Mid Toggle\n\n  Paragraph inside h2 toggle\n\n### [toggle] Collapsible Section\n\n  Paragraph inside toggle\n\n  - Nested item\n\n### Plain Section'
 assert_eq "$md_out" "$expected_md"
 
 tab_input_md="$tmp_dir/toggle-tabs.md"
 cat > "$tab_input_md" <<'EOF'
+### [toggle] Collapsible Section
+	Paragraph inside toggle
+  
+  - Nested item
+
 ### [toggle] Tab Section
 	Paragraph with tab indent
 	- Nested tab item
@@ -127,4 +195,4 @@ assert_contains "$tab_json_out" '"is_toggleable": true'
 assert_contains "$tab_json_out" '"content": "Paragraph with tab indent"'
 assert_contains "$tab_json_out" '"content": "Nested tab item"'
 
-echo "PASS: slice 14 toggleable h3 parser"
+echo "PASS: slice 14 toggleable heading parser"

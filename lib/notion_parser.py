@@ -29,7 +29,7 @@ LANGUAGE_ALIASES = {
     "csv": "plain text"
 }
 
-TOGGLEABLE_H3_PREFIX = "[toggle] "
+TOGGLEABLE_HEADING_PREFIX = "[toggle] "
 INDENT_WIDTH = 2
 
 
@@ -103,11 +103,11 @@ def rich_text_to_md(rich_text_list):
     return md
 
 
-def parse_heading_3(text):
+def parse_heading(text):
     is_toggleable = False
-    if text.lower().startswith(TOGGLEABLE_H3_PREFIX):
+    if text.lower().startswith(TOGGLEABLE_HEADING_PREFIX):
         is_toggleable = True
-        text = text[len(TOGGLEABLE_H3_PREFIX):]
+        text = text[len(TOGGLEABLE_HEADING_PREFIX):]
     return {
         "rich_text": parse_inline_text(text),
         "is_toggleable": is_toggleable
@@ -160,19 +160,19 @@ def parse_single_block(line):
         return {
             "object": "block",
             "type": "heading_1",
-            "heading_1": {"rich_text": parse_inline_text(stripped[2:])}
+            "heading_1": parse_heading(stripped[2:])
         }
     if stripped.startswith("## "):
         return {
             "object": "block",
             "type": "heading_2",
-            "heading_2": {"rich_text": parse_inline_text(stripped[3:])}
+            "heading_2": parse_heading(stripped[3:])
         }
     if stripped.startswith("### "):
         return {
             "object": "block",
             "type": "heading_3",
-            "heading_3": parse_heading_3(stripped[4:])
+            "heading_3": parse_heading(stripped[4:])
         }
     if stripped.startswith("- [ ] "):
         return {
@@ -325,10 +325,7 @@ def parse_blocks(lines, start=0, base_indent=0):
         block = parse_single_block(line)
         i += 1
 
-        if (
-            block["type"] == "heading_3"
-            and block["heading_3"].get("is_toggleable")
-        ):
+        if block["type"] in ["heading_1", "heading_2", "heading_3"] and block[block["type"]].get("is_toggleable"):
             child_start = i
             child_indent = None
             while child_start < len(lines):
@@ -345,7 +342,7 @@ def parse_blocks(lines, start=0, base_indent=0):
             if child_indent is not None:
                 children, i = parse_blocks(lines, child_start, child_indent)
                 if children:
-                    block["heading_3"]["children"] = children
+                    block[block["type"]]["children"] = children
 
         blocks.append(block)
 
@@ -370,11 +367,13 @@ def render_block(block, indent=0):
     if b_type == "table_of_contents":
         lines = [f"{prefix}[TOC]"]
     elif b_type == "heading_1":
-        lines = [f"{prefix}# {text}"]
+        toggle_prefix = TOGGLEABLE_HEADING_PREFIX if content.get("is_toggleable", False) else ""
+        lines = [f"{prefix}# {toggle_prefix}{text}"]
     elif b_type == "heading_2":
-        lines = [f"{prefix}## {text}"]
+        toggle_prefix = TOGGLEABLE_HEADING_PREFIX if content.get("is_toggleable", False) else ""
+        lines = [f"{prefix}## {toggle_prefix}{text}"]
     elif b_type == "heading_3":
-        toggle_prefix = TOGGLEABLE_H3_PREFIX if content.get("is_toggleable", False) else ""
+        toggle_prefix = TOGGLEABLE_HEADING_PREFIX if content.get("is_toggleable", False) else ""
         lines = [f"{prefix}### {toggle_prefix}{text}"]
     elif b_type == "bulleted_list_item":
         lines = [f"{prefix}- {text}"]

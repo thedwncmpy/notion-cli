@@ -253,7 +253,7 @@ notion_extract_frontmatter_properties() {
 
   notion_split_markdown_properties "$source_file" "$tmp_content" "$tmp_props"
   if [[ ! -s "$tmp_props" ]]; then
-    echo '{}'
+    jq -nc '{properties:{}, icon:null}'
     return 0
   fi
 
@@ -262,19 +262,19 @@ notion_extract_frontmatter_properties() {
     return 1
   fi
 
-  jq -c . "$tmp_props"
-}
-
-notion_render_markdown_with_properties() {
-  local properties_json="$1"
-  local markdown_body="$2"
-
-  if [[ "$properties_json" == "{}" ]]; then
-    printf "%s\n" "$markdown_body"
-    return 0
-  fi
-
-  printf "%s\n%s\n%s\n\n%s\n" "$NOTION_PROPERTIES_HEADER" "$properties_json" "$NOTION_PROPERTIES_FOOTER" "$markdown_body"
+  jq -c '
+    if has("properties") or has("icon") then
+      {
+        properties: (.properties // {}),
+        icon: (.icon // null)
+      }
+    else
+      {
+        properties: .,
+        icon: null
+      }
+    end
+  ' "$tmp_props"
 }
 
 notion_serializable_page_properties() {
@@ -319,30 +319,106 @@ notion_serializable_page_properties() {
 }
 
 notion_merge_upload_properties() {
-  local existing_props_json="$1"
-  local local_props_json="$2"
+  local existing_metadata_json="$1"
+  local local_metadata_json="$2"
   local title_property="$3"
   local title="$4"
   local relation_property="${5:-}"
   local relation_page_id="${6:-}"
 
   jq -nc \
-    --argjson existing "$existing_props_json" \
-    --argjson local_props "$local_props_json" \
+    --argjson existing "$existing_metadata_json" \
+    --argjson local_meta "$local_metadata_json" \
     --arg title_prop "$title_property" \
     --arg page_title "$title" \
     --arg rel_prop "$relation_property" \
     --arg rel_id "$relation_page_id" '
-    ($existing + $local_props) as $merged
-    | ($merged + {
+    ($existing.properties + $local_meta.properties) as $merged_props
+    | ($merged_props + {
         ($title_prop): { title: [{ text: { content: $page_title } }] }
       }) as $with_title
-    | if $rel_prop != "" and $rel_id != "" then
-        $with_title + { ($rel_prop): { relation: [{ id: $rel_id }] } }
-      else
-        $with_title
-      end
+    | {
+        properties:
+          (if $rel_prop != "" and $rel_id != "" then
+            $with_title + { ($rel_prop): { relation: [{ id: $rel_id }] } }
+          else
+            $with_title
+          end),
+        icon: ($local_meta.icon // $existing.icon // null)
+      }
   '
+}
+
+notion_serializable_page_icon() {
+  local page_json="$1"
+
+  printf '%s' "$page_json" | jq -c '
+    if .icon == null then null
+    elif .icon.type == "emoji" then {type: "emoji", emoji: .icon.emoji}
+    elif .icon.type == "external" then {type: "external", external: {url: .icon.external.url}}
+    elif .icon.type == "file" then {type: "external", external: {url: .icon.file.url}}
+    else null
+    end
+  '
+}
+
+notion_build_page_create_payload() {
+  local database_id="$1"
+  local page_metadata_json="$2"
+  local tmp_blocks="$3"
+  local first_chunk_count="$4"
+
+  jq -n \
+    --arg db "$database_id" \
+    --argjson meta "$page_metadata_json" \
+    --argjson first_chunk_count "$first_chunk_count" \
+    --slurpfile child_blocks "$tmp_blocks" '
+    {
+      parent: { database_id: $db },
+      properties: $meta.properties,
+      children: ($child_blocks[0][0:$first_chunk_count])
+    }
+    + (if $meta.icon == null then {} else {icon: $meta.icon} end)
+  '
+}
+
+notion_build_download_metadata() {
+  local properties_json="$1"
+  local icon_json="$2"
+
+  jq -nc --argjson props "$properties_json" --argjson icon "$icon_json" '{
+    properties: $props,
+    icon: $icon
+  }'
+}
+
+notion_metadata_has_no_content() {
+  local metadata_json="$1"
+  [[ "$(printf '%s' "$metadata_json" | jq -c '.properties == {} and .icon == null')" == "true" ]]
+}
+
+notion_render_markdown_with_properties_legacy_aware() {
+  local metadata_json="$1"
+  local markdown_body="$2"
+
+  if notion_metadata_has_no_content "$metadata_json"; then
+    printf "%s\n" "$markdown_body"
+    return 0
+  fi
+
+  if [[ "$(printf '%s' "$metadata_json" | jq -c '.icon == null')" == "true" ]]; then
+    printf "%s\n%s\n%s\n\n%s\n" "$NOTION_PROPERTIES_HEADER" "$(printf '%s' "$metadata_json" | jq -c '.properties')" "$NOTION_PROPERTIES_FOOTER" "$markdown_body"
+    return 0
+  fi
+
+  printf "%s\n%s\n%s\n\n%s\n" "$NOTION_PROPERTIES_HEADER" "$metadata_json" "$NOTION_PROPERTIES_FOOTER" "$markdown_body"
+}
+
+notion_render_markdown_with_properties() {
+  local metadata_json="$1"
+  local markdown_body="$2"
+
+  notion_render_markdown_with_properties_legacy_aware "$metadata_json" "$markdown_body"
 }
 
 notion_cmd_upload() {
@@ -449,11 +525,11 @@ notion_cmd_upload() {
     return 1
   fi
 
-  local tmp_blocks tmp_content tmp_props local_props_json
+  local tmp_blocks tmp_content tmp_props local_metadata_json
   tmp_blocks="$(mktemp)"
   tmp_content="$(mktemp)"
   tmp_props="$(mktemp)"
-  local_props_json="$(notion_extract_frontmatter_properties "$abs_file" "$tmp_content" "$tmp_props")" || {
+  local_metadata_json="$(notion_extract_frontmatter_properties "$abs_file" "$tmp_content" "$tmp_props")" || {
     rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
     return 1
   }
@@ -495,14 +571,17 @@ notion_cmd_upload() {
   local total_blocks
   total_blocks="$(jq 'length' "$tmp_blocks")"
 
-  local page_id response existing_props_json merged_props_json
+  local page_id response existing_metadata_json merged_metadata_json
   page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
   if [[ -n "$page_id" ]]; then
-    existing_props_json="$(notion_serializable_page_properties "$(printf '%s' "$search_response" | jq -c '.results[0]')" "$title_property" "$relation_property")"
+    existing_metadata_json="$(jq -nc \
+      --argjson props "$(notion_serializable_page_properties "$(printf '%s' "$search_response" | jq -c '.results[0]')" "$title_property" "$relation_property")" \
+      --argjson icon "$(notion_serializable_page_icon "$(printf '%s' "$search_response" | jq -c '.results[0]')")" \
+      '{properties: $props, icon: $icon}')"
   else
-    existing_props_json='{}'
+    existing_metadata_json='{"properties":{},"icon":null}'
   fi
-  merged_props_json="$(notion_merge_upload_properties "$existing_props_json" "$local_props_json" "$title_property" "$title" "$relation_property" "$relation_page_id")"
+  merged_metadata_json="$(notion_merge_upload_properties "$existing_metadata_json" "$local_metadata_json" "$title_property" "$title" "$relation_property" "$relation_page_id")"
 
   if [[ -n "$page_id" ]]; then
     response="$(notion_api_request "PATCH" "https://api.notion.com/v1/pages/$page_id" "$notion_token" '{"archived":true}')" || return 1
@@ -521,29 +600,7 @@ notion_cmd_upload() {
     else
       first_chunk_count="$total_blocks"
     fi
-    if [[ -n "$relation_page_id" ]]; then
-      payload="$(jq -n \
-        --arg db "$database_id" \
-        --argjson first_chunk_count "$first_chunk_count" \
-        --argjson props "$merged_props_json" \
-        --slurpfile child_blocks "$tmp_blocks" \
-        '{
-          parent: { database_id: $db },
-          properties: $props,
-          children: ($child_blocks[0][0:$first_chunk_count])
-        }')"
-    else
-      payload="$(jq -n \
-        --arg db "$database_id" \
-        --argjson first_chunk_count "$first_chunk_count" \
-        --argjson props "$merged_props_json" \
-        --slurpfile child_blocks "$tmp_blocks" \
-        '{
-          parent: { database_id: $db },
-          properties: $props,
-          children: ($child_blocks[0][0:$first_chunk_count])
-        }')"
-    fi
+    payload="$(notion_build_page_create_payload "$database_id" "$merged_metadata_json" "$tmp_blocks" "$first_chunk_count")"
 
     response="$(notion_api_request "POST" "https://api.notion.com/v1/pages" "$notion_token" "$payload")" || return 1
 
@@ -682,7 +739,7 @@ notion_cmd_download() {
     return 1
   fi
 
-  local match_count page_id page_json properties_json
+  local match_count page_id page_json properties_json icon_json metadata_json
   match_count="$(printf '%s' "$search_response" | jq '.results | length')"
 
   if [[ "$match_count" -eq 0 ]]; then
@@ -712,6 +769,8 @@ notion_cmd_download() {
   fi
   page_json="$(printf '%s' "$search_response" | jq -c '.results[0]')"
   properties_json="$(notion_serializable_page_properties "$page_json" "$title_property" "$relation_property")"
+  icon_json="$(notion_serializable_page_icon "$page_json")"
+  metadata_json="$(notion_build_download_metadata "$properties_json" "$icon_json")"
 
   local blocks_response
   blocks_response="$(notion_fetch_block_tree "$page_id" "$notion_token")" || return 1
@@ -736,7 +795,7 @@ notion_cmd_download() {
   fi
 
   mkdir -p "$abs_target_path"
-  notion_render_markdown_with_properties "$properties_json" "$md_content" >"$abs_target"
+  notion_render_markdown_with_properties "$metadata_json" "$md_content" >"$abs_target"
   notion_print_success "Downloaded '$abs_target_name' to $abs_target"
   return 0
 }
