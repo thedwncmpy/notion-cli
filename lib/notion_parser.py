@@ -369,6 +369,25 @@ def parse_blocks(lines, start=0, base_indent=0):
                 if children:
                     block[block["type"]]["children"] = children
 
+        if block["type"] in ["bulleted_list_item", "to_do"]:
+            child_start = i
+            child_indent = None
+            while child_start < len(lines):
+                candidate = lines[child_start]
+                if not candidate.strip():
+                    child_start += 1
+                    continue
+                candidate_indent = indentation_units(candidate)
+                if candidate_indent <= base_indent:
+                    break
+                child_indent = candidate_indent
+                break
+
+            if child_indent is not None:
+                children, i = parse_blocks(lines, child_start, child_indent)
+                if children:
+                    block[block["type"]]["children"] = children
+
         blocks.append(block)
 
     return blocks, i
