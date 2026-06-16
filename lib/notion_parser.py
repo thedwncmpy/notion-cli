@@ -450,11 +450,18 @@ def render_block(block, indent=0):
 def notion_blocks_to_md(blocks):
     md_lines = []
     prev_type = None
+    skip_next_divider = False
 
     for block in blocks:
         b_type = block.get("type")
         if not b_type:
             continue
+
+        if skip_next_divider and b_type == "divider":
+            skip_next_divider = False
+            prev_type = b_type
+            continue
+        skip_next_divider = False
 
         if prev_type is not None:
             is_list = b_type in ["bulleted_list_item", "to_do"]
@@ -463,6 +470,8 @@ def notion_blocks_to_md(blocks):
                 md_lines.append("")
 
         md_lines.extend(render_block(block, 0))
+        if b_type == "table_of_contents":
+            skip_next_divider = True
         prev_type = b_type
 
     return "\n".join(md_lines)

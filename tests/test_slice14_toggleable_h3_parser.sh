@@ -83,6 +83,11 @@ cat > "$reverse_in" <<'EOF'
   },
   {
     "object": "block",
+    "type": "divider",
+    "divider": {}
+  },
+  {
+    "object": "block",
     "type": "heading_1",
     "heading_1": {
       "rich_text": [
