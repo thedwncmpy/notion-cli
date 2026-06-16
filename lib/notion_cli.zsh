@@ -800,6 +800,53 @@ notion_cmd_download() {
   return 0
 }
 
+notion_cmd_download_all() {
+  local dry_run=0
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    dry_run=1
+    shift
+  fi
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_download_all_usage
+    return 0
+  fi
+  if [[ $# -gt 0 ]]; then
+    notion_print_error "download-all does not accept file arguments"
+    notion_download_all_usage
+    return 1
+  fi
+
+  local files=()
+  local found
+  found="$(find . -type f -name '*.md' | LC_ALL=C sort)"
+  if [[ -n "$found" ]]; then
+    files=("${(@f)found}")
+  fi
+
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    notion_print_error "no markdown files found under current directory"
+    return 1
+  fi
+
+  local file rel failures=0
+  for file in "${files[@]}"; do
+    rel="${file#./}"
+    if [[ "$dry_run" -eq 1 ]]; then
+      notion_cmd_download --dry-run "$rel" || failures=$((failures + 1))
+    else
+      notion_cmd_download "$rel" || failures=$((failures + 1))
+    fi
+  done
+
+  if [[ "$failures" -gt 0 ]]; then
+    notion_print_error "download-all failed for $failures file(s)"
+    return 1
+  fi
+
+  notion_print_success "Processed ${#files[@]} markdown file(s)."
+  return 0
+}
+
 notion_main() {
   local cmd="${1:-}"
   if [[ -z "$cmd" ]]; then
@@ -832,6 +879,9 @@ notion_main() {
     ;;
   download)
     notion_cmd_download "$@"
+    ;;
+  download-all)
+    notion_cmd_download_all "$@"
     ;;
   *)
     notion_print_error "Unknown command: $cmd"
@@ -950,8 +1000,8 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "help init link status upload download completion version" -- "$cur") )
-    return 0
+      COMPREPLY=( $(compgen -W "help init link status upload download download-all completion version" -- "$cur") )
+      return 0
   fi
 
   case "$cmd" in
@@ -967,6 +1017,9 @@ _ns() {
       ;;
     status|upload|download)
       COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
+      ;;
+    download-all)
+      COMPREPLY=( $(compgen -W "--dry-run --help" -- "$cur") )
       ;;
     completion)
       COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
@@ -999,6 +1052,7 @@ _ns() {
         'status[Show resolved sync intent]' \
         'upload[Upload markdown file]' \
         'download[Download markdown file]' \
+        'download-all[Download all markdown files under current directory]' \
         'completion[Print completion script]' \
         'version[Show ns version]'
       ;;
@@ -1012,6 +1066,9 @@ _ns() {
           ;;
         status|upload|download)
           _arguments '1:markdown file:_files -g "*.md"'
+          ;;
+        download-all)
+          _arguments '--dry-run[Show download intent for each markdown file]' '--help[Show help]'
           ;;
         completion)
           _values 'shell' zsh bash
