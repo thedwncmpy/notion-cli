@@ -378,6 +378,42 @@ notion_build_page_create_payload() {
   '
 }
 
+notion_resolve_appended_child_id() {
+  local parent_id="$1"
+  local notion_token="$2"
+  local response="$3"
+  local idx="$4"
+  local count="$5"
+  local child_parent_id children_response total start_index
+
+  child_parent_id="$(printf '%s' "$response" | jq -r --argjson idx "$idx" '.results[$idx].id // empty')"
+  if [[ -n "$child_parent_id" ]]; then
+    printf '%s\n' "$child_parent_id"
+    return 0
+  fi
+
+  children_response="$(notion_fetch_all_children_blocks "$parent_id" "$notion_token")" || return 1
+  if printf '%s' "$children_response" | jq -e '.object == "error"' >/dev/null; then
+    printf '%s\n' "$children_response"
+    return 0
+  fi
+
+  total="$(printf '%s' "$children_response" | jq '.results | length')"
+  start_index=$((total - count))
+  if [[ "$start_index" -lt 0 ]]; then
+    jq -n --arg message "Notion append response missing child block id and refetch returned too few child blocks." '{object:"error", message:$message}'
+    return 0
+  fi
+
+  child_parent_id="$(printf '%s' "$children_response" | jq -r --argjson idx "$((start_index + idx))" '.results[$idx].id // empty')"
+  if [[ -z "$child_parent_id" ]]; then
+    jq -n --arg message "Notion append response missing child block id and refetch could not resolve it." '{object:"error", message:$message}'
+    return 0
+  fi
+
+  printf '%s\n' "$child_parent_id"
+}
+
 notion_append_block_children_tree() {
   local parent_id="$1"
   local notion_token="$2"
@@ -409,9 +445,9 @@ notion_append_block_children_tree() {
       child_blocks="$(printf '%s' "$chunk" | jq -c --argjson idx "$idx" '.[$idx] as $block | ($block.type) as $type | $block[$type].children // []')"
       child_count="$(printf '%s' "$child_blocks" | jq 'length')"
       if [[ "$child_count" -gt 0 ]]; then
-        child_parent_id="$(printf '%s' "$response" | jq -r --argjson idx "$idx" '.results[$idx].id // empty')"
-        if [[ -z "$child_parent_id" ]]; then
-          jq -n --arg message "Notion append response missing child block id for nested upload." '{object:"error", message:$message}'
+        child_parent_id="$(notion_resolve_appended_child_id "$parent_id" "$notion_token" "$response" "$idx" "$count")" || return 1
+        if printf '%s' "$child_parent_id" | jq -e '.object == "error"' >/dev/null 2>&1; then
+          printf '%s\n' "$child_parent_id"
           return 0
         fi
         response="$(notion_append_block_children_tree "$child_parent_id" "$notion_token" "$child_blocks")" || return 1

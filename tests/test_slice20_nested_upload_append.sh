@@ -53,13 +53,21 @@ if [[ "$args" == *"-X POST"*"/v1/databases/"*"/query"* ]]; then
 elif [[ "$args" == *"-X POST"*"/v1/pages"* ]]; then
   printf '{"id":"page_new"}'
 elif [[ "$args" == *"-X PATCH"*"/v1/blocks/page_new/children"* ]]; then
-  printf '{"results":[{"id":"heading_block"}],"has_more":false}'
+  printf '{"results":[],"has_more":false}'
 elif [[ "$args" == *"-X PATCH"*"/v1/blocks/heading_block/children"* ]]; then
-  printf '{"results":[{"id":"parent_todo"}],"has_more":false}'
+  printf '{"results":[],"has_more":false}'
 elif [[ "$args" == *"-X PATCH"*"/v1/blocks/parent_todo/children"* ]]; then
-  printf '{"results":[{"id":"spotlight_todo"},{"id":"tabs_todo"}],"has_more":false}'
+  printf '{"results":[],"has_more":false}'
 elif [[ "$args" == *"-X PATCH"*"/v1/blocks/tabs_todo/children"* ]]; then
-  printf '{"results":[{"id":"browser_todo"}],"has_more":false}'
+  printf '{"results":[],"has_more":false}'
+elif [[ "$args" == *"-X GET"*"/v1/blocks/page_new/children"* ]]; then
+  printf '{"results":[{"id":"heading_block","type":"heading_3","heading_3":{"rich_text":[]}}],"has_more":false}'
+elif [[ "$args" == *"-X GET"*"/v1/blocks/heading_block/children"* ]]; then
+  printf '{"results":[{"id":"parent_todo","type":"to_do","to_do":{"rich_text":[]}}],"has_more":false}'
+elif [[ "$args" == *"-X GET"*"/v1/blocks/parent_todo/children"* ]]; then
+  printf '{"results":[{"id":"spotlight_todo","type":"to_do","to_do":{"rich_text":[]}},{"id":"tabs_todo","type":"to_do","to_do":{"rich_text":[]}}],"has_more":false}'
+elif [[ "$args" == *"-X GET"*"/v1/blocks/tabs_todo/children"* ]]; then
+  printf '{"results":[{"id":"browser_todo","type":"to_do","to_do":{"rich_text":[]}}],"has_more":false}'
 else
   printf '{"results":[],"has_more":false}'
 fi
@@ -78,6 +86,8 @@ assert_contains "$log_content" "/v1/blocks/page_new/children"
 assert_contains "$log_content" "/v1/blocks/heading_block/children"
 assert_contains "$log_content" "/v1/blocks/parent_todo/children"
 assert_contains "$log_content" "/v1/blocks/tabs_todo/children"
+assert_contains "$log_content" "-X GET https://api.notion.com/v1/blocks/page_new/children"
+assert_contains "$log_content" "-X GET https://api.notion.com/v1/blocks/heading_block/children"
 assert_contains "$log_content" "\"content\": \"implement full page browser\""
 
 echo "PASS: slice 20 nested upload append"
