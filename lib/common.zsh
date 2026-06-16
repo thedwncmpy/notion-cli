@@ -12,6 +12,7 @@ notion_usage() {
   notion_print_usage "  completion Print shell completion script"
   notion_print_usage "  version    Show ns version"
   notion_print_usage "  upload     Upload a markdown file to Notion"
+  notion_print_usage "  upload-all Upload all markdown files under current directory"
   notion_print_usage "  download   Download a markdown file from Notion"
   notion_print_usage "  download-all Download all markdown files under current directory"
   notion_print_usage "  help       Show this help"
@@ -37,6 +38,10 @@ notion_link_usage() {
 # Example: notion_upload_usage
 notion_upload_usage() {
   notion_print_usage "Usage: ns upload [--dry-run] <file.md>"
+}
+
+notion_upload_all_usage() {
+  notion_print_usage "Usage: ns upload-all [--dry-run]"
 }
 
 # Prints download command usage.
