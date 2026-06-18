@@ -100,6 +100,8 @@ assert_contains "$out" "Processed 2 page(s)."
 
 [[ "$(cat "$notes_root/project/alpha.md")" == "alpha-body" ]] || fail "expected alpha.md to be created"
 [[ "$(cat "$notes_root/project/beta.md")" == "beta-body" ]] || fail "expected beta.md to be created"
+[[ -f "$notes_root/.notion-cli/pages/project/alpha.json" ]] || fail "expected alpha sidecar"
+[[ -f "$notes_root/.notion-cli/pages/project/beta.json" ]] || fail "expected beta sidecar"
 [[ ! -f "$notes_root/alpha.md" ]] || fail "did not expect root alpha.md"
 
 query_count="$(grep -c -- "/v1/databases/db_test/query" "$SLICE22_CURL_LOG" || true)"

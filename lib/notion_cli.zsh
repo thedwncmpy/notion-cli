@@ -235,8 +235,10 @@ notion_download_page_to_target() {
   local page_json="$1"
   local abs_target="$2"
   local notion_token="$3"
-  local title_property="$4"
-  local relation_property="${5:-}"
+  local config_path="$4"
+  local notes_root="$5"
+  local title_property="$6"
+  local relation_property="${7:-}"
 
   local page_id properties_json icon_json metadata_json
   page_id="$(printf '%s' "$page_json" | jq -r '.id // empty')"
@@ -272,6 +274,7 @@ notion_download_page_to_target() {
   mkdir -p "${abs_target%/*}"
   local display_name="${${abs_target##*/}%.md}"
   notion_render_markdown_with_properties "$metadata_json" "$md_content" >"$abs_target"
+  notion_write_metadata_sidecar "$config_path" "$notes_root" "$abs_target" "$metadata_json" || return 1
   notion_print_success "Downloaded '$display_name' to $abs_target"
 }
 
@@ -396,19 +399,20 @@ notion_split_markdown_properties() {
   fi
 }
 
-notion_extract_frontmatter_properties() {
-  local source_file="$1"
-  local tmp_content="$2"
-  local tmp_props="$3"
+notion_metadata_sidecar_path() {
+  local config_path="$1"
+  local relative_path="$2"
 
-  notion_split_markdown_properties "$source_file" "$tmp_content" "$tmp_props"
-  if [[ ! -s "$tmp_props" ]]; then
-    jq -nc '{properties:{}, icon:null}'
-    return 0
-  fi
+  local config_dir="${config_path:A:h}"
+  local rel_json="${relative_path%.md}.json"
+  echo "$config_dir/pages/$rel_json"
+}
 
-  if ! jq -e . "$tmp_props" >/dev/null 2>&1; then
-    notion_print_error "invalid notion-properties metadata in '$source_file'"
+notion_normalize_metadata_json() {
+  local metadata_path="$1"
+
+  if ! jq -e . "$metadata_path" >/dev/null 2>&1; then
+    notion_print_error "invalid notion-properties metadata in '$metadata_path'"
     return 1
   fi
 
@@ -424,7 +428,47 @@ notion_extract_frontmatter_properties() {
         icon: null
       }
     end
-  ' "$tmp_props"
+  ' "$metadata_path"
+}
+
+notion_extract_local_metadata() {
+  local source_file="$1"
+  local config_path="$2"
+  local notes_root="$3"
+  local tmp_content="$4"
+  local tmp_props="$5"
+
+  notion_split_markdown_properties "$source_file" "$tmp_content" "$tmp_props"
+
+  local relative_path sidecar_path
+  relative_path="$(notion_relative_path_under_notes_root "$source_file" "$notes_root")" || return 1
+  sidecar_path="$(notion_metadata_sidecar_path "$config_path" "$relative_path")"
+
+  if [[ -f "$sidecar_path" ]]; then
+    notion_normalize_metadata_json "$sidecar_path"
+    return 0
+  fi
+
+  if [[ ! -s "$tmp_props" ]]; then
+    jq -nc '{properties:{}, icon:null}'
+    return 0
+  fi
+
+  notion_normalize_metadata_json "$tmp_props"
+}
+
+notion_write_metadata_sidecar() {
+  local config_path="$1"
+  local notes_root="$2"
+  local target_file="$3"
+  local metadata_json="$4"
+
+  local relative_path sidecar_path
+  relative_path="$(notion_relative_path_under_notes_root "$target_file" "$notes_root")" || return 1
+  sidecar_path="$(notion_metadata_sidecar_path "$config_path" "$relative_path")"
+
+  mkdir -p "${sidecar_path%/*}"
+  printf '%s\n' "$metadata_json" >"$sidecar_path"
 }
 
 notion_serializable_page_properties() {
@@ -651,7 +695,7 @@ notion_render_markdown_with_properties() {
   local metadata_json="$1"
   local markdown_body="$2"
 
-  notion_render_markdown_with_properties_legacy_aware "$metadata_json" "$markdown_body"
+  printf "%s\n" "$markdown_body"
 }
 
 notion_cmd_upload() {
@@ -762,7 +806,7 @@ notion_cmd_upload() {
   tmp_blocks="$(mktemp)"
   tmp_content="$(mktemp)"
   tmp_props="$(mktemp)"
-  local_metadata_json="$(notion_extract_frontmatter_properties "$abs_file" "$tmp_content" "$tmp_props")" || {
+  local_metadata_json="$(notion_extract_local_metadata "$abs_file" "$config_path" "$abs_notes_root" "$tmp_content" "$tmp_props")" || {
     rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
     return 1
   }
@@ -986,7 +1030,7 @@ notion_cmd_download() {
   fi
 
   page_json="$(printf '%s' "$search_response" | jq -c '.results[0]')"
-  notion_download_page_to_target "$page_json" "$abs_target" "$notion_token" "$title_property" "$relation_property"
+  notion_download_page_to_target "$page_json" "$abs_target" "$notion_token" "$config_path" "$abs_notes_root" "$title_property" "$relation_property"
 }
 
 notion_cmd_download_all() {
@@ -1175,7 +1219,7 @@ notion_cmd_download_database_scope() {
       echo "  title: $title"
       echo "  action: overwrite local file from remote page"
     else
-      notion_download_page_to_target "$page" "$abs_target" "$notion_token" "$title_property" "$target_relation_property" || failures=$((failures + 1))
+      notion_download_page_to_target "$page" "$abs_target" "$notion_token" "$config_path" "$notes_root" "$title_property" "$target_relation_property" || failures=$((failures + 1))
     fi
     processed=$((processed + 1))
   done <<< "$pages"

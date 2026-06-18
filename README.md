@@ -22,6 +22,7 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 ## What It Does
 
 - Stores project config in `.notion-cli/config.json`
+- Stores per-page Notion properties/icons in `.notion-cli/pages/*.json`
 - Keeps secrets separate via `NOTION_TOKEN` (env) or `~/.config/notion-cli/secrets.zsh`
 - Uploads local markdown to matching Notion pages
 - Downloads Notion pages into local markdown files (create or overwrite)

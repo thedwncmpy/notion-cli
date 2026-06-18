@@ -127,8 +127,11 @@ out="$(cd "$notes_root" && "$CLI" download "project/deep/nested/nested-note.md" 
 assert_contains "$out" "Downloaded 'nested-note'"
 [[ -f "$notes_root/project/deep/nested/nested-note.md" ]] || fail "expected nested download file"
 assert_contains "$(cat "$SLICE10_CURL_LOG")" "page_nested/children?start_cursor=cursor1"
-expected_nested="$(with_props '{"Done":{"checkbox":false}}' $'# nested\nfrom-pagination')"
+expected_nested=$'# nested\nfrom-pagination'
 actual_nested="$(cat "$notes_root/project/deep/nested/nested-note.md")"
 [[ "$actual_nested" == "$expected_nested" ]] || fail "unexpected nested download content: $actual_nested"
+sidecar_path="$notes_root/.notion-cli/pages/project/deep/nested/nested-note.json"
+[[ -f "$sidecar_path" ]] || fail "expected nested sidecar file"
+[[ "$(jq -c '.properties' "$sidecar_path")" == '{"Done":{"checkbox":false}}' ]] || fail "unexpected nested sidecar properties"
 
 echo "PASS: slice 10 reliability hardening contract"

@@ -106,6 +106,8 @@ assert_contains "$out" "Processed 2 markdown file(s)."
 
 [[ "$(cat "$notes_root/project/alpha.md")" == "alpha-body" ]] || fail "expected alpha.md to be refreshed"
 [[ "$(cat "$notes_root/project/deep/beta.md")" == "beta-body" ]] || fail "expected beta.md to be refreshed"
+[[ -f "$notes_root/.notion-cli/pages/project/alpha.json" ]] || fail "expected alpha sidecar"
+[[ -f "$notes_root/.notion-cli/pages/project/deep/beta.json" ]] || fail "expected beta sidecar"
 
 query_count="$(grep -c -- "/v1/databases/db_test/query" "$SLICE18_CURL_LOG" || true)"
 [[ "$query_count" -eq 2 ]] || fail "expected 2 database queries, got $query_count"
