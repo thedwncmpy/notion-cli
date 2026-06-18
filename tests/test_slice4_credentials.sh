@@ -34,7 +34,7 @@ trap 'rm -rf "$tmp_home"' EXIT
 
 # 1) env var precedence over secrets file
 out="$({
-  HOME="$tmp_home" NOTION_TOKEN="env-token" run_zsh 'mkdir -p ~/.config/notion-cli; echo "export NOTION_TOKEN=file-token" > ~/.config/notion-cli/secrets.zsh; notion_load_token'
+  HOME="$tmp_home" NOTION_TOKEN="env-token" run_zsh 'mkdir -p ~/.config/ns-cli; echo "export NOTION_TOKEN=file-token" > ~/.config/ns-cli/secrets.zsh; notion_load_token'
 } 2>&1)" || true
 if [[ "$out" == *"not implemented"* ]]; then
   fail "slice-4 skeleton still unimplemented for env precedence test"
@@ -43,7 +43,7 @@ assert_eq "$out" "env-token"
 
 # 2) secrets file fallback when env missing
 out="$({
-  HOME="$tmp_home" run_zsh 'unset NOTION_TOKEN; mkdir -p ~/.config/notion-cli; echo "export NOTION_TOKEN=file-token" > ~/.config/notion-cli/secrets.zsh; notion_load_token'
+  HOME="$tmp_home" run_zsh 'unset NOTION_TOKEN; mkdir -p ~/.config/ns-cli; echo "export NOTION_TOKEN=file-token" > ~/.config/ns-cli/secrets.zsh; notion_load_token'
 } 2>&1)" || true
 if [[ "$out" == *"not implemented"* ]]; then
   fail "slice-4 skeleton still unimplemented for file fallback test"
@@ -52,7 +52,7 @@ assert_eq "$out" "file-token"
 
 # 3) hard fail + actionable message when token missing
 set +e
-out="$({ HOME="$tmp_home" run_zsh 'unset NOTION_TOKEN; rm -f ~/.config/notion-cli/secrets.zsh; notion_require_token'; } 2>&1)"
+out="$({ HOME="$tmp_home" run_zsh 'unset NOTION_TOKEN; rm -f ~/.config/ns-cli/secrets.zsh; notion_require_token'; } 2>&1)"
 code=$?
 set -e
 if [[ "$out" == *"not implemented"* ]]; then

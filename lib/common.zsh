@@ -1,6 +1,8 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 NOTION_CLI_VERSION="${NOTION_CLI_VERSION:-__NS_VERSION__}"
+NS_CONFIG_DIR_NAME="${NS_CONFIG_DIR_NAME:-.ns-cli}"
+NS_SECRETS_DIR_NAME="${NS_SECRETS_DIR_NAME:-ns-cli}"
 
 notion_usage() {
   notion_print_usage "Usage: ns <command> [options]"
@@ -115,7 +117,7 @@ notion_print_usage() { notion_print $'\033[1;35m' "" "$*"; }
 # Returns default local secrets file path.
 # Example: notion_default_secrets_path
 notion_default_secrets_path() {
-  echo "$HOME/.config/notion-cli/secrets.zsh"
+  echo "$HOME/.config/$NS_SECRETS_DIR_NAME/secrets.zsh"
 }
 
 # Resolves parser path, honoring NOTION_PARSER_PATH override.

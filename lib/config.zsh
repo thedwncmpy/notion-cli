@@ -34,7 +34,7 @@ notion_init_config() {
   local title_property="${4:-Name}"
 
   local abs_notes_root="${notes_root:A}"
-  local cfg_dir="$abs_notes_root/.notion-cli"
+  local cfg_dir="$abs_notes_root/$NS_CONFIG_DIR_NAME"
   local cfg_path="$cfg_dir/config.json"
 
   if [[ -f "$cfg_path" && "$force" -ne 1 ]]; then
@@ -48,13 +48,13 @@ notion_init_config() {
   notion_print_success "Initialized config at $cfg_path"
 }
 
-# Finds .notion-cli/config.json by walking up from current directory.
+# Finds $NS_CONFIG_DIR_NAME/config.json by walking up from current directory.
 # Example: config_path="$(find_config)"
 find_config() {
   local current_dir="${PWD:A}"
   while [[ "$current_dir" != "/" ]]; do
-    if [[ -f "$current_dir/.notion-cli/config.json" ]]; then
-      echo "$current_dir/.notion-cli/config.json"
+    if [[ -f "$current_dir/$NS_CONFIG_DIR_NAME/config.json" ]]; then
+      echo "$current_dir/$NS_CONFIG_DIR_NAME/config.json"
       return 0
     fi
     current_dir="$(dirname "$current_dir")"

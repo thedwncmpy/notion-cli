@@ -112,7 +112,7 @@ export NOTION_TOKEN="test_token"
 export NOTION_PARSER_PATH="$parser_stub"
 export SLICE7_CURL_LOG="$tmp_dir/curl.log"
 
-assert_contains "$(cat "$notes_root/.notion-cli/config.json")" "\"relation_property\": \"relation_prop\""
+assert_contains "$(cat "$notes_root/.ns-cli/config.json")" "\"relation_property\": \"relation_prop\""
 
 note_rel="project/note-roundtrip.md"
 note_path="$notes_root/$note_rel"
@@ -127,7 +127,7 @@ printf "local-stale\n" > "$note_path"
 out="$(cd "$notes_root" && "$CLI" download "$note_rel" 2>&1)"
 assert_contains "$out" "Downloaded 'note-roundtrip'"
 assert_file_body "$note_path" $'# title\nroundtrip-body'
-sidecar_path="$notes_root/.notion-cli/pages/project/note-roundtrip.json"
+sidecar_path="$notes_root/.ns-cli/pages/project/note-roundtrip.json"
 [[ -f "$sidecar_path" ]] || fail "expected sidecar file at $sidecar_path"
 assert_sidecar_props "$sidecar_path" '{"Done":{"checkbox":true},"Status":{"select":{"name":"Active"}}}'
 assert_sidecar_icon "$sidecar_path" '{"type":"emoji","emoji":"📝"}'
@@ -138,7 +138,7 @@ missing_path="$notes_root/project/new-note.md"
 out="$(cd "$notes_root" && "$CLI" download "project/new-note.md" 2>&1)"
 assert_contains "$out" "Downloaded 'new-note'"
 assert_file_body "$missing_path" $'# title\nroundtrip-body'
-missing_sidecar="$notes_root/.notion-cli/pages/project/new-note.json"
+missing_sidecar="$notes_root/.ns-cli/pages/project/new-note.json"
 [[ -f "$missing_sidecar" ]] || fail "expected sidecar file at $missing_sidecar"
 assert_sidecar_props "$missing_sidecar" '{"Done":{"checkbox":true},"Status":{"select":{"name":"Active"}}}'
 assert_sidecar_icon "$missing_sidecar" '{"type":"emoji","emoji":"📝"}'
@@ -146,8 +146,8 @@ assert_sidecar_icon "$missing_sidecar" '{"type":"emoji","emoji":"📝"}'
 # Create-path upload should honor mapped relation_property in page create payload.
 create_note_path="$notes_root/project/create-path.md"
 printf '%s' "new-content" > "$create_note_path"
-mkdir -p "$notes_root/.notion-cli/pages/project"
-printf '%s\n' '{"properties":{"Done":{"checkbox":true},"Status":{"select":{"name":"Active"}}},"icon":{"type":"emoji","emoji":"📝"}}' > "$notes_root/.notion-cli/pages/project/create-path.json"
+mkdir -p "$notes_root/.ns-cli/pages/project"
+printf '%s\n' '{"properties":{"Done":{"checkbox":true},"Status":{"select":{"name":"Active"}}},"icon":{"type":"emoji","emoji":"📝"}}' > "$notes_root/.ns-cli/pages/project/create-path.json"
 out="$(cd "$notes_root" && "$CLI" upload "project/create-path.md" 2>&1)"
 assert_contains "$out" "Uploaded 'create-path' successfully."
 assert_contains "$(cat "$SLICE7_CURL_LOG")" "\"relation_prop\": {"

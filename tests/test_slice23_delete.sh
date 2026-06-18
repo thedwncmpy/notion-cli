@@ -38,8 +38,8 @@ mkdir -p "$notes_root/project" "$tmp_dir/bin"
 (cd "$notes_root" && "$CLI" link project rel_123 notebook >/dev/null)
 
 printf 'body\n' > "$notes_root/project/delete-me.md"
-mkdir -p "$notes_root/.notion-cli/pages/project"
-printf '%s\n' '{"properties":{"Done":{"checkbox":true}},"icon":null}' > "$notes_root/.notion-cli/pages/project/delete-me.json"
+mkdir -p "$notes_root/.ns-cli/pages/project"
+printf '%s\n' '{"properties":{"Done":{"checkbox":true}},"icon":null}' > "$notes_root/.ns-cli/pages/project/delete-me.json"
 
 cat > "$tmp_dir/bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -72,12 +72,12 @@ dry_run_out="$(cd "$notes_root" && "$CLI" delete --dry-run "project/delete-me.md
 assert_contains "$dry_run_out" "Dry-run delete intent:"
 assert_contains "$dry_run_out" "archive remote page and delete local file"
 [[ -f "$notes_root/project/delete-me.md" ]] || fail "dry-run should not delete markdown file"
-[[ -f "$notes_root/.notion-cli/pages/project/delete-me.json" ]] || fail "dry-run should not delete sidecar"
+[[ -f "$notes_root/.ns-cli/pages/project/delete-me.json" ]] || fail "dry-run should not delete sidecar"
 
 out="$(cd "$notes_root" && "$CLI" delete "project/delete-me.md" 2>&1)"
 assert_contains "$out" "Deleted 'delete-me' locally and archived the remote page."
 [[ ! -f "$notes_root/project/delete-me.md" ]] || fail "expected markdown file to be deleted"
-[[ ! -f "$notes_root/.notion-cli/pages/project/delete-me.json" ]] || fail "expected sidecar to be deleted"
+[[ ! -f "$notes_root/.ns-cli/pages/project/delete-me.json" ]] || fail "expected sidecar to be deleted"
 assert_contains "$(cat "$SLICE23_CURL_LOG")" "-X PATCH https://api.notion.com/v1/pages/page_delete_me"
 
 echo "PASS: slice 23 delete contract"

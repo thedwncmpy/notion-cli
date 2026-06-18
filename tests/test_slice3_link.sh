@@ -63,7 +63,7 @@ set -e
 assert_exit_code "$code" 0
 assert_contains "$out" "Linked 'projects' to 'page_projects' using property 'notebook'"
 
-config_path=".notion-cli/config.json"
+config_path=".ns-cli/config.json"
 actual_mapping="$(jq -r '.mappings.projects.relation_page_id' "$config_path")"
 [[ "$actual_mapping" == "page_projects" ]] || fail "expected mapping page_projects, got: $actual_mapping"
 actual_property="$(jq -r '.mappings.projects.relation_property' "$config_path")"

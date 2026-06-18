@@ -63,7 +63,7 @@ set -e
 assert_exit_code "$code" 0
 assert_contains "$out" "Initialized config"
 
-config_path="$notes_root/.notion-cli/config.json"
+config_path="$notes_root/.ns-cli/config.json"
 [[ -f "$config_path" ]] || fail "expected config file at $config_path"
 
 actual_db="$(jq -r '.database_id' "$config_path")"

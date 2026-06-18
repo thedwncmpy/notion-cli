@@ -130,7 +130,7 @@ assert_contains "$(cat "$SLICE10_CURL_LOG")" "page_nested/children?start_cursor=
 expected_nested=$'# nested\nfrom-pagination'
 actual_nested="$(cat "$notes_root/project/deep/nested/nested-note.md")"
 [[ "$actual_nested" == "$expected_nested" ]] || fail "unexpected nested download content: $actual_nested"
-sidecar_path="$notes_root/.notion-cli/pages/project/deep/nested/nested-note.json"
+sidecar_path="$notes_root/.ns-cli/pages/project/deep/nested/nested-note.json"
 [[ -f "$sidecar_path" ]] || fail "expected nested sidecar file"
 [[ "$(jq -c '.properties' "$sidecar_path")" == '{"Done":{"checkbox":false}}' ]] || fail "unexpected nested sidecar properties"
 

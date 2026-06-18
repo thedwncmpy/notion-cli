@@ -8,8 +8,8 @@ This guide is based on the current implementation in `lib/`, not on intended beh
 
 - Uses exact filename-to-page-title matching.
 - Uses first-level directory mappings to scope relation-based sync.
-- Stores project config in `.notion-cli/config.json` under your notes root.
-- Stores downloaded page metadata in `.notion-cli/pages/**/*.json`.
+- Stores project config in `.ns-cli/config.json` under your notes root.
+- Stores downloaded page metadata in `.ns-cli/pages/**/*.json`.
 - Uploads Markdown to Notion.
 - Downloads Notion pages to Markdown.
 - Fails hard on ambiguous matches.
@@ -30,7 +30,7 @@ Set `NOTION_TOKEN` in either of these places:
 export NOTION_TOKEN="secret_xxx"
 ```
 
-Or in `~/.config/notion-cli/secrets.zsh`:
+Or in `~/.config/ns-cli/secrets.zsh`:
 
 ```bash
 export NOTION_TOKEN="secret_xxx"
@@ -56,7 +56,7 @@ This creates:
 
 ```text
 notes/
-  .notion-cli/
+  .ns-cli/
     config.json
 ```
 
@@ -82,7 +82,7 @@ Only first-level directories are mapped. A file at `notes/project/daily/today.md
 
 ## Config Format
 
-Example `.notion-cli/config.json`:
+Example `.ns-cli/config.json`:
 
 ```json
 {
@@ -119,7 +119,7 @@ In that case the relation property defaults to `notebook`.
 ns init --database-id <id> --notes-root <path> [--title-property <name>] [--force]
 ```
 
-- Creates `.notion-cli/config.json` inside the notes root.
+- Creates `.ns-cli/config.json` inside the notes root.
 - `--force` overwrites an existing config.
 
 ### `ns link`
@@ -223,7 +223,7 @@ If a single match exists:
 
 - the remote page is converted to Markdown
 - the target file is created or overwritten
-- page properties and icon metadata are written to `.notion-cli/pages/...json`
+- page properties and icon metadata are written to `.ns-cli/pages/...json`
 
 If no match exists:
 
@@ -257,7 +257,7 @@ If a single match exists:
 
 - the remote page is archived
 - the local Markdown file is deleted if present
-- the matching `.notion-cli/pages/...json` sidecar is deleted if present
+- the matching `.ns-cli/pages/...json` sidecar is deleted if present
 
 If no match exists:
 
@@ -347,13 +347,13 @@ The CLI is intentionally strict:
 Downloaded page properties and icon metadata are stored in sidecar JSON files under:
 
 ```text
-.notion-cli/pages/
+.ns-cli/pages/
 ```
 
 For example:
 
 ```text
-notes/.notion-cli/pages/project/today.json
+notes/.ns-cli/pages/project/today.json
 ```
 
 The current upload flow reads these sidecars and uses them when recreating a page.

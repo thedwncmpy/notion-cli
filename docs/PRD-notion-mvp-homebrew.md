@@ -14,7 +14,7 @@ The CLI supports four subcommands:
 - `notion upload <file.md>`
 - `notion download <file.md>`
 
-Project metadata is stored in a versioned project config (`.notion-cli/config.json`) and secrets are stored separately (`NOTION_TOKEN` via environment variable or `~/.config/notion-cli/secrets.zsh`). Upload/download behavior remains strict and deterministic: exact filename stem to exact Notion title, strict root enforcement, explicit failures on ambiguity or mismatch.
+Project metadata is stored in a versioned project config (`.ns-cli/config.json`) and secrets are stored separately (`NOTION_TOKEN` via environment variable or `~/.config/ns-cli/secrets.zsh`). Upload/download behavior remains strict and deterministic: exact filename stem to exact Notion title, strict root enforcement, explicit failures on ambiguity or mismatch.
 
 ## User Stories
 
@@ -26,7 +26,7 @@ Project metadata is stored in a versioned project config (`.notion-cli/config.js
 6. As a contributor, I want project mapping config committed to git, so that collaborators share relation mappings.
 7. As a security-conscious user, I want auth token storage separated from project config, so that secrets are not committed.
 8. As a power user, I want to provide `NOTION_TOKEN` via runtime environment variable, so that I can run automation and CI jobs.
-9. As a local user, I want fallback token loading from `~/.config/notion-cli/secrets.zsh`, so that daily usage is convenient.
+9. As a local user, I want fallback token loading from `~/.config/ns-cli/secrets.zsh`, so that daily usage is convenient.
 10. As a note organizer, I want to link first-level subdirectories to relation page IDs, so that folder structure maps to Notion relations.
 11. As a cautious user, I want `notion link` to fail if subdirectory does not exist, so that mappings cannot drift.
 12. As a cautious user, I want changing an existing subdirectory mapping to require `--force`, so that accidental remaps are prevented.
@@ -53,11 +53,11 @@ Project metadata is stored in a versioned project config (`.notion-cli/config.js
 
 - Build a single-command CLI interface (`notion`) with explicit subcommands rather than multiple binaries.
 - Preserve existing two-way sync capabilities as the MVP behavioral baseline.
-- Introduce a project configuration module for `.notion-cli/config.json` with versioned schema.
+- Introduce a project configuration module for `.ns-cli/config.json` with versioned schema.
 - Keep project metadata in config: `version`, `notes_root`, `database_id`, and first-level directory relation mappings.
 - Separate secret management into a credential-loading module with precedence:
   - `NOTION_TOKEN` from runtime environment
-  - fallback to `~/.config/notion-cli/secrets.zsh`
+  - fallback to `~/.config/ns-cli/secrets.zsh`
 - Remove dependency on `NOTION_NOTES_DB_ID` as a secret; database ID is project metadata.
 - Enforce initialization-first workflow: upload/download/link require valid project config.
 - Enforce strict guardrails:
