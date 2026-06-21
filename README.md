@@ -10,6 +10,9 @@ The CLI keeps sync behavior deterministic:
 
 ## Install
 
+<details>
+<summary>Homebrew</summary>
+
 From your Homebrew tap:
 
 ```bash
@@ -18,16 +21,22 @@ brew install thedwncmpy/homebrew-notion-cli/notion
 ```
 
 If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
+</details>
 
-## Requirements
+<details>
+<summary>Requirements</summary>
 
 - `zsh`
 - `python3`
 - `jq`
 - `curl`
 - A Notion integration token with access to the target database
+</details>
 
 ## What It Does
+
+<details open>
+<summary>Overview</summary>
 
 - Stores project config in `.notion-cli/config.json`
 - Stores per-page Notion properties and icons in `.notion-cli/pages/**/*.json`
@@ -36,10 +45,259 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 - Downloads Notion pages into local Markdown files
 - Deletes local Markdown files and archives matching Notion pages
 - Supports both mapped subdirectories and root-level notes
+</details>
+
+## Getting Started
+
+<details open>
+<summary>1. Set up a root todo directory at ~/todo</summary>
+
+Start with a notes root at `~/todo`:
+
+```bash
+mkdir -p ~/todo
+printf '%s\n' '# Today' '' '- [ ] Buy milk' '- [ ] Ship README updates' > ~/todo/today.md
+```
+
+`ns` needs a Notion integration token with access to your target database. Export it in your shell:
+
+```bash
+export NOTION_TOKEN="secret_xxx"
+```
+
+Or store it in `~/.config/notion-cli/secrets.zsh`:
+
+```bash
+export NOTION_TOKEN="secret_xxx"
+```
+
+Environment variables take precedence over the secrets file.
+
+Initialize the project:
+
+```bash
+ns init --database-id <notion_db_id> --notes-root ~/todo
+```
+
+If your Notion database title property is not `Name`, set it explicitly:
+
+```bash
+ns init --database-id <notion_db_id> --notes-root ~/todo --title-property Title
+```
+
+Check how `ns` resolves the file before uploading:
+
+```bash
+ns status ~/todo/today.md
+```
+
+Upload the note:
+
+```bash
+ns upload ~/todo/today.md
+```
+
+Upload everything under the current scope:
+
+```bash
+cd ~/todo
+ns upload-all
+```
+
+Download the same note back from Notion:
+
+```bash
+ns download ~/todo/today.md
+```
+</details>
+
+<details>
+<summary>2. Set up auto-upload from Neovim</summary>
+
+Enable watch for the file you want to auto-upload:
+
+```bash
+ns watch ~/todo/today.md --enable --cooldown-seconds 60
+```
+
+You can inspect watch-enabled files by running the watcher:
+
+```bash
+ns watch
+```
+
+For editor-driven uploads, `watch-upload` is the one-shot command:
+
+```bash
+ns watch-upload ~/todo/today.md
+```
+
+Add this autocommand to your Neovim config:
+
+```lua
+vim.api.nvim_create_autocmd("BufWritePost", {
+  pattern = "*.md",
+  callback = function(args)
+    vim.fn.jobstart({ "ns", "watch-upload", args.file }, {
+      stdout_buffered = true,
+      stderr_buffered = true,
+      on_stdout = function(_, data)
+        for _, line in ipairs(data or {}) do
+          if line ~= "" then
+            vim.schedule(function()
+              vim.api.nvim_echo({ { line, "None" } }, false, {})
+            end)
+          end
+        end
+      end,
+      on_stderr = function(_, data)
+        for _, line in ipairs(data or {}) do
+          if line ~= "" then
+            vim.schedule(function()
+              vim.api.nvim_echo({ { line, "WarningMsg" } }, false, {})
+            end)
+          end
+        end
+      end,
+    })
+  end,
+})
+```
+
+On save, Neovim will surface the real `ns watch-upload` output, for example:
+
+```text
+Change detected: today.md
+Uploaded 'today' successfully.
+```
+
+If you save again before cooldown expires, `ns` will skip the upload. Other integrations coming soon.
+</details>
+
+<details>
+<summary>3. Add a subdirectory config with ns link</summary>
+
+Root-level files in `~/todo` do not need a mapping. Use `ns link` when you want a first-level subdirectory to map to a Notion relation.
+
+```bash
+mkdir -p ~/todo/work
+printf '%s\n' '# Sprint Tasks' '' '- [ ] Review PRs' '- [ ] Ship release notes' > ~/todo/work/sprint.md
+```
+
+Link the `work` subdirectory to a relation page and property in your database:
+
+```bash
+cd ~/todo
+ns link work <relation_page_id> <relation_property>
+```
+
+Now inspect the resolved sync behavior:
+
+```bash
+ns status ~/todo/work/sprint.md
+```
+
+Upload the linked note:
+
+```bash
+ns upload ~/todo/work/sprint.md
+```
+
+That gives users a simple mental model:
+
+- `~/todo/today.md` is a root-level note and syncs without a directory mapping
+- `~/todo/work/sprint.md` uses the `work` mapping created by `ns link`
+
+If you want to inspect the generated project config directly:
+
+```bash
+cat ~/todo/.notion-cli/config.json
+```
+
+Example shape after `ns init` and `ns link`:
+
+```json
+{
+  "version": 1,
+  "database_id": "<notion_db_id>",
+  "notes_root": "/Users/you/todo",
+  "title_property": "Name",
+  "mappings": {
+    "work": {
+      "relation_page_id": "<relation_page_id>",
+      "relation_property": "<relation_property>"
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary>4. Create a simple note with links and toggles</summary>
+
+Create a note that uses toggle headings and Notion page links:
+
+```bash
+cat > ~/todo/work/roadmap.md <<'EOF'
+# [toggle] Weekly Plan
+
+  Wrap up the current tasks.
+
+  - [ ] Finish the CLI docs
+  - [ ] Review todo sync flow
+
+## References
+
+[[link_to_page page_id:12345678-1234-1234-1234-123456789abc]]
+EOF
+```
+
+Inspect the sync target:
+
+```bash
+ns status ~/todo/work/roadmap.md
+```
+
+Upload it:
+
+```bash
+ns upload ~/todo/work/roadmap.md
+```
+
+This is the markdown shape `ns` already understands for:
+
+- Toggleable headings like `# [toggle] Weekly Plan`
+- Nested content under toggles with two-space indentation
+- Link blocks like `[[link_to_page page_id:...]]`
+</details>
+
+## Command Overview
+
+<details>
+<summary>CLI commands</summary>
+
+```bash
+ns init --database-id <id> --notes-root <path> [--title-property <name>] [--force]
+ns link <subdir> <relation_page_id> <relation_property> [--force]
+ns status [<file.md>]
+ns upload [--dry-run] <file.md>
+ns upload-all [--dry-run]
+ns upload-sync [--dry-run]
+ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]
+ns watch-upload <file.md>
+ns download [--dry-run] <file.md>
+ns delete [--dry-run] <file.md>
+ns download-all [--dry-run]
+ns download-sync [--dry-run]
+ns completion <zsh|bash>
+ns version
+```
+</details>
 
 ## Markdown Notes
 
-Supported Markdown components:
+<details>
+<summary>Supported markdown blocks</summary>
 
 | Markdown | Notion block | Notes |
 | --- | --- | --- |
@@ -73,172 +331,7 @@ Inline rich text is also preserved for supported blocks:
 
   - Nested item
 ```
-
-## Command Overview
-
-```bash
-ns init --database-id <id> --notes-root <path> [--title-property <name>] [--force]
-ns link <subdir> <relation_page_id> <relation_property> [--force]
-ns status [<file.md>]
-ns upload [--dry-run] <file.md>
-ns upload-all [--dry-run]
-ns upload-sync [--dry-run]
-ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]
-ns watch-upload <file.md>
-ns download [--dry-run] <file.md>
-ns delete [--dry-run] <file.md>
-ns download-all [--dry-run]
-ns download-sync [--dry-run]
-ns completion <zsh|bash>
-ns version
-```
-
-## Quick Start
-
-1. Export your Notion token:
-
-```bash
-export NOTION_TOKEN="secret_xxx"
-```
-
-Or store it in `~/.config/notion-cli/secrets.zsh`:
-
-```bash
-export NOTION_TOKEN="secret_xxx"
-```
-
-Environment variables take precedence over the secrets file.
-
-2. Initialize a project:
-
-```bash
-ns init --database-id <notion_db_id> --notes-root ./notes
-```
-
-If your Notion database title column is not named `Name`, set it explicitly during init:
-
-```bash
-ns init --database-id <notion_db_id> --notes-root ./notes --title-property Title
-```
-
-3. Map a first-level folder to a relation page id and relation property:
-
-```bash
-ns link project rel_123 notebook
-```
-
-4. Upload a note:
-
-```bash
-ns upload ./notes/project/today.md
-```
-
-5. Upload every Markdown file in the current scope:
-
-```bash
-cd ./notes/project
-ns upload-all
-```
-
-Or enable watch mode for one note with a one-minute cooldown:
-
-```bash
-ns watch ./notes/project/today.md --enable --cooldown-seconds 60
-ns watch
-ns watch-upload ./notes/project/today.md
-```
-
-Neovim save hook example:
-
-```lua
-vim.api.nvim_create_autocmd("BufWritePost", {
-  pattern = "*.md",
-  callback = function(args)
-    vim.fn.jobstart({ "ns", "watch-upload", args.file }, {
-      stdout_buffered = true,
-      stderr_buffered = true,
-      on_stdout = function(_, data)
-        for _, line in ipairs(data or {}) do
-          if line ~= "" then
-            vim.schedule(function()
-              vim.api.nvim_echo({ { line, "None" } }, false, {})
-            end)
-          end
-        end
-      end,
-      on_stderr = function(_, data)
-        for _, line in ipairs(data or {}) do
-          if line ~= "" then
-            vim.schedule(function()
-              vim.api.nvim_echo({ { line, "WarningMsg" } }, false, {})
-            end)
-          end
-        end
-      end,
-    })
-  end,
-})
-```
-
-This keeps `watch-upload` attached so status lines and warnings show in Neovim instead of being discarded by a detached job.
-
-Example end-to-end setup for `./notes/todo/task1.md`:
-
-1. Enable watch for the file:
-
-```bash
-ns watch ./notes/todo/task1.md --enable --cooldown-seconds 60
-```
-
-2. Add the `BufWritePost` autocommand shown above to your Neovim config.
-
-3. Open `./notes/todo/task1.md` in Neovim and save it.
-
-4. On the first save, Neovim should show status lines from `ns watch-upload`, for example:
-
-```text
-Change detected: todo/task1.md
-Uploaded 'task1' successfully.
-```
-
-5. If you save again before the cooldown expires, Neovim should show a cooldown warning instead of uploading again.
-
-6. If two saves overlap closely enough to start two `watch-upload` runs for the same file, only one upload proceeds. The other exits with:
-
-```text
-Skipping 'todo/task1.md'; sync already in progress.
-```
-
-This lock is per file, not per directory, so `todo/task2.md` can still upload while `todo/task1.md` is in progress.
-
-6. Inspect resolved sync behavior for one note:
-
-```bash
-ns status ./notes/project/today.md
-```
-
-Run `ns status` with no file argument to print the project config JSON.
-
-7. Download a note:
-
-```bash
-ns download ./notes/project/today.md
-```
-
-8. Delete a note locally and archive the matching Notion page:
-
-```bash
-ns delete ./notes/project/today.md
-```
-
-9. Download every page in the current scope:
-
-```bash
-cd ./notes/project
-ns download-all
-```
-
-Run `download-all` from `notes_root` to materialize the full database. Run it from a linked directory to only download pages whose configured relation contains that linked page id.
+</details>
 
 ## Config Shape
 
